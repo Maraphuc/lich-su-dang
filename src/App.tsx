@@ -36,17 +36,55 @@ const normalizeBank = (chapters: QuestionBankChapter[]): QuestionBankChapter[] =
     questionCount: chapter.questions.length
   }));
 
+const mergeQuestionBank = (savedChapters: QuestionBankChapter[]): QuestionBankChapter[] => {
+  const savedById = new Map(savedChapters.map((chapter) => [chapter.id, chapter]));
+  const baseIds = new Set(baseQuestionBank.map((chapter) => chapter.id));
+
+  const mergedBase = baseQuestionBank.map((baseChapter) => {
+    const savedChapter = savedById.get(baseChapter.id);
+    if (!savedChapter) return baseChapter;
+
+    const savedQuestionsById = new Map(savedChapter.questions.map((question) => [question.id, question]));
+    const baseQuestionIds = new Set(baseChapter.questions.map((question) => question.id));
+    const mergedQuestions = [
+      ...baseChapter.questions.map((question) => savedQuestionsById.get(question.id) ?? question),
+      ...savedChapter.questions.filter((question) => !baseQuestionIds.has(question.id))
+    ];
+
+    return {
+      ...baseChapter,
+      ...savedChapter,
+      source: savedChapter.source ?? baseChapter.source,
+      enabled: savedChapter.enabled !== false,
+      questions: mergedQuestions,
+      questionCount: mergedQuestions.length
+    };
+  });
+
+  const customChapters = savedChapters.filter((chapter) => !baseIds.has(chapter.id));
+  return normalizeBank([...mergedBase, ...customChapters]);
+};
+
 const loadQuestionBank = (): QuestionBankChapter[] => {
   try {
     const saved = window.localStorage.getItem(QUESTION_BANK_STORAGE_KEY);
     if (!saved) return normalizeBank(baseQuestionBank);
+
     const parsed = JSON.parse(saved) as QuestionBankChapter[];
     if (!Array.isArray(parsed)) return normalizeBank(baseQuestionBank);
-    return normalizeBank(parsed);
+
+    const migrated = mergeQuestionBank(parsed);
+    window.localStorage.setItem(QUESTION_BANK_STORAGE_KEY, JSON.stringify(migrated));
+    return migrated;
   } catch {
     return normalizeBank(baseQuestionBank);
   }
 };
+
+const isAdminLocation = () =>
+  window.location.hash === '#/admin' ||
+  window.location.hash === '#admin' ||
+  window.location.search.includes('admin=1');
 
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60);
@@ -87,7 +125,7 @@ const HeartRain = () => {
 
 export default function App() {
   const [questionBank, setQuestionBank] = useState<QuestionBankChapter[]>(loadQuestionBank);
-  const [isAdminRoute, setIsAdminRoute] = useState(() => window.location.hash === '#/admin');
+  const [isAdminRoute, setIsAdminRoute] = useState(isAdminLocation);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -96,16 +134,31 @@ export default function App() {
     () => normalizeBank(questionBank).filter((chapter) => chapter.enabled),
     [questionBank]
   );
+
   const totalQuestions = useMemo(
     () => enabledChapters.reduce((total, chapter) => total + chapter.questions.length, 0),
     [enabledChapters]
   );
 
   useEffect(() => {
-    const handleHashChange = () => setIsAdminRoute(window.location.hash === '#/admin');
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    const handleLocationChange = () => setIsAdminRoute(isAdminLocation());
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
   }, []);
+
+  useEffect(() => {
+    const migrated = mergeQuestionBank(questionBank);
+    const current = JSON.stringify(questionBank);
+    const next = JSON.stringify(migrated);
+    if (current !== next) {
+      window.localStorage.setItem(QUESTION_BANK_STORAGE_KEY, next);
+      setQuestionBank(migrated);
+    }
+  }, [questionBank]);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -177,9 +230,7 @@ export default function App() {
 
   const handleAnswer = (answer: string) => {
     if (!quizState) return;
-
     const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
-
     setQuizState({
       ...quizState,
       userAnswers: {
@@ -194,14 +245,11 @@ export default function App() {
 
     let score = 0;
     quizState.questions.forEach((question) => {
-      if (quizState.userAnswers[question.id] === question.answer) {
-        score++;
-      }
+      if (quizState.userAnswers[question.id] === question.answer) score++;
     });
 
     const endTime = Date.now();
     const finalElapsedTime = Math.floor((endTime - quizState.startTime) / 1000);
-
     setElapsedTime(finalElapsedTime);
     setQuizState({ ...quizState, isFinished: true, score, endTime });
 
@@ -226,7 +274,6 @@ export default function App() {
 
   const nextQuestion = () => {
     if (!quizState) return;
-
     if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
       setQuizState({ ...quizState, currentQuestionIndex: quizState.currentQuestionIndex + 1 });
     } else {
@@ -252,14 +299,10 @@ export default function App() {
 
   const stats = useMemo(() => {
     if (!quizState) return { answered: 0, correct: 0 };
-
     let correct = 0;
     quizState.questions.forEach((question) => {
-      if (quizState.userAnswers[question.id] === question.answer) {
-        correct++;
-      }
+      if (quizState.userAnswers[question.id] === question.answer) correct++;
     });
-
     return { answered: Object.keys(quizState.userAnswers).length, correct };
   }, [quizState]);
 
@@ -312,6 +355,15 @@ export default function App() {
                     <p className="text-xs text-white/60">Câu hỏi</p>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={openAdmin}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-extrabold text-sidebar-bg transition-all hover:-translate-y-0.5"
+                >
+                  <Settings size={17} />
+                  Bảng điều khiển Admin
+                </button>
               </div>
             </div>
           </aside>
@@ -330,7 +382,7 @@ export default function App() {
                       Ôn tập Lịch sử Đảng rõ ràng, hiện đại và dễ mở rộng.
                     </h2>
                     <p className="mt-4 max-w-2xl text-base leading-8 text-text-dim sm:text-lg">
-                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Có trang Admin để tạo chương mới, chỉnh sửa câu hỏi và export JSON.
+                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Chương 4 là bộ câu hỏi bổ sung từ nguồn chính thống và Admin cho phép tự tạo chương mới.
                     </p>
                   </div>
 
@@ -353,17 +405,17 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <div className="mt-6 grid gap-3 sm:grid-cols-[auto_1fr]">
                   <button
                     type="button"
                     onClick={openAdmin}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-white px-5 py-3 text-sm font-extrabold transition-all hover:border-accent hover:text-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
                   >
                     <Settings size={17} />
-                    Mở trang Admin
+                    Bảng điều khiển Admin
                   </button>
                   <span className="rounded-2xl bg-bg px-5 py-3 text-sm font-semibold text-text-dim">
-                    Admin lưu local trên thiết bị và có thể export JSON để cập nhật mã nguồn.
+                    Link trực tiếp: <span className="font-mono text-accent">#/admin</span>. Admin hiện là bảng quản trị local trong app, không phải backend đăng nhập riêng.
                   </span>
                 </div>
               </motion.div>
@@ -446,7 +498,6 @@ export default function App() {
             <div className="mx-auto mb-6 grid h-20 w-20 place-items-center rounded-[28px] bg-success/10">
               <Trophy className="text-success" size={42} />
             </div>
-
             <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.22em] text-accent">
               {quizState.mode === 'exam' ? 'Kết quả thi thử' : 'Kết quả ôn tập'}
             </p>
@@ -518,7 +569,9 @@ export default function App() {
                 <div
                   key={chapter.id}
                   className={`grid h-10 w-10 place-items-center rounded-2xl border text-xs font-black transition-all lg:h-12 lg:w-12 lg:text-sm ${
-                    chapter.id === selectedChapter.id ? 'border-accent bg-accent text-white shadow-lg shadow-blue-500/20' : 'border-white/10 bg-white/10 text-white/45'
+                    chapter.id === selectedChapter.id
+                      ? 'border-accent bg-accent text-white shadow-lg shadow-blue-500/20'
+                      : 'border-white/10 bg-white/10 text-white/45'
                   }`}
                 >
                   C{chapter.id}
@@ -530,9 +583,7 @@ export default function App() {
               type="button"
               onClick={() => {
                 if (Object.keys(quizState.userAnswers).length > 0) {
-                  if (window.confirm('Bạn có chắc chắn muốn nộp bài và kết thúc ngay bây giờ không?')) {
-                    finishQuiz();
-                  }
+                  if (window.confirm('Bạn có chắc chắn muốn nộp bài và kết thúc ngay bây giờ không?')) finishQuiz();
                 } else {
                   finishQuiz();
                 }
@@ -564,7 +615,9 @@ export default function App() {
                 </div>
                 <div className="rounded-2xl bg-bg px-3 py-2 text-center sm:min-w-28">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Đã làm</p>
-                  <p className="text-sm font-black">{stats.answered}/{quizState.questions.length}</p>
+                  <p className="text-sm font-black">
+                    {stats.answered}/{quizState.questions.length}
+                  </p>
                 </div>
                 <div className="rounded-2xl bg-bg px-3 py-2 text-center sm:min-w-28">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-dim">
@@ -605,18 +658,15 @@ export default function App() {
                   const showFeedback = quizState.mode === 'study' && hasAnswered;
                   const isLocked = quizState.mode === 'study' && hasAnswered;
 
-                  let buttonClass = 'w-full rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 sm:p-5 ';
+                  let buttonClass =
+                    'w-full rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 sm:p-5 ';
 
                   if (!hasAnswered) {
                     buttonClass += 'border-border bg-white hover:border-accent hover:bg-accent/5';
                   } else if (showFeedback) {
-                    if (isCorrect) {
-                      buttonClass += 'border-success bg-success/10 text-success';
-                    } else if (isSelected) {
-                      buttonClass += 'border-red-500 bg-red-50 text-red-700';
-                    } else {
-                      buttonClass += 'border-border bg-white opacity-55';
-                    }
+                    if (isCorrect) buttonClass += 'border-success bg-success/10 text-success';
+                    else if (isSelected) buttonClass += 'border-red-500 bg-red-50 text-red-700';
+                    else buttonClass += 'border-border bg-white opacity-55';
                   } else if (isSelected) {
                     buttonClass += 'border-accent bg-accent/10 text-accent';
                   } else {
@@ -624,7 +674,13 @@ export default function App() {
                   }
 
                   return (
-                    <button key={key} type="button" disabled={isLocked} onClick={() => handleAnswer(key)} className={buttonClass}>
+                    <button
+                      key={key}
+                      type="button"
+                      disabled={isLocked}
+                      onClick={() => handleAnswer(key)}
+                      className={buttonClass}
+                    >
                       <span className="flex items-start gap-4">
                         <span
                           className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-black transition-colors ${
@@ -675,7 +731,9 @@ export default function App() {
                   <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-text-dim">Bản đồ câu hỏi</p>
                   <p className="mt-1 text-sm text-text-dim">Chạm để chuyển câu nhanh</p>
                 </div>
-                <div className="rounded-2xl bg-accent/10 px-3 py-2 text-sm font-black text-accent">{Math.round(progress)}%</div>
+                <div className="rounded-2xl bg-accent/10 px-3 py-2 text-sm font-black text-accent">
+                  {Math.round(progress)}%
+                </div>
               </div>
 
               <div className="grid max-h-[310px] grid-cols-6 gap-2 overflow-y-auto pr-1 custom-scrollbar sm:grid-cols-8 lg:max-h-[calc(100vh-11rem)] lg:grid-cols-6">
@@ -684,7 +742,8 @@ export default function App() {
                   const isCurrent = index === quizState.currentQuestionIndex;
                   const isCorrect = isAnswered && quizState.userAnswers[question.id] === question.answer;
 
-                  let dotClass = 'aspect-square rounded-xl border text-[11px] font-black transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 ';
+                  let dotClass =
+                    'aspect-square rounded-xl border text-[11px] font-black transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 ';
 
                   if (quizState.mode === 'study' && isAnswered) {
                     dotClass += isCorrect ? 'border-success bg-success text-white' : 'border-red-500 bg-red-500 text-white';
