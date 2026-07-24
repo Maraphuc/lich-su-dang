@@ -1,0 +1,97 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - ui-professional-responsive-apk
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build debug APK
+    runs-on: ubuntu-22.04
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          java -version
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+      - name: Install Android SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Install web dependencies
+        run: npm ci || npm install
+
+      - name: Check TypeScript
+        run: npm run lint
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Install Capacitor packages
+        run: npm run prepare:capacitor
+
+      - name: Create Android project
+        run: |
+          rm -rf android
+          npx cap add android
+
+      - name: Configure Android SDK path
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Sync web build to Android
+        run: npx cap sync android
+
+      - name: Show Gradle config
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --version --no-daemon
+
+      - name: Build debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace --warning-mode all
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lich-su-dang-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

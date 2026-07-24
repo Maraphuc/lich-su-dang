@@ -1,12 +1,26 @@
-import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Trophy, Clock, ChevronRight, ChevronLeft, RotateCcw, Home, CheckCircle2, Heart } from 'lucide-react';
-import React, { useState, useEffect, useMemo } from 'react';
-import { chapter1Questions } from './data/chapter1';
-import { chapter2Questions } from './data/chapter2';
-import { chapter3Questions } from './data/chapter3';
-import { Question, QuizMode, QuizState, Chapter } from './types';
+import { motion } from 'motion/react';
+import {
+  Award,
+  BookOpen,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Heart,
+  Home,
+  RotateCcw,
+  Target,
+  Trophy
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AdminPage } from './AdminPage';
+import { baseQuestionBank } from './data/questionBank';
+import { Question, QuestionBankChapter, QuizMode, QuizState } from './types';
 
-// Utility to shuffle array
+const QUESTION_BANK_STORAGE_KEY = 'lich-su-dang-question-bank-v1';
+const ADMIN_ROUTE = '#/quan-tri-cau-hoi';
+const ADMIN_ACCESS_KEY = 'maraphuc-admin-2026';
+
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -16,69 +30,180 @@ const shuffle = <T,>(array: T[]): T[] => {
   return newArray;
 };
 
+const normalizeBank = (chapters: QuestionBankChapter[]): QuestionBankChapter[] =>
+  chapters.map((chapter) => ({
+    ...chapter,
+    enabled: chapter.enabled !== false,
+    questionCount: chapter.questions.length
+  }));
+
+const mergeQuestionBank = (savedChapters: QuestionBankChapter[]): QuestionBankChapter[] => {
+  const savedById = new Map(savedChapters.map((chapter) => [chapter.id, chapter]));
+  const baseIds = new Set(baseQuestionBank.map((chapter) => chapter.id));
+
+  const mergedBase = baseQuestionBank.map((baseChapter) => {
+    const savedChapter = savedById.get(baseChapter.id);
+    if (!savedChapter) return baseChapter;
+
+    const savedQuestionsById = new Map(savedChapter.questions.map((question) => [question.id, question]));
+    const baseQuestionIds = new Set(baseChapter.questions.map((question) => question.id));
+    const savedExtraQuestions = savedChapter.questions.filter((question) => {
+      if (baseQuestionIds.has(question.id)) return false;
+      if (baseChapter.id === 4 && question.id < 4000) return false;
+      return true;
+    });
+    const mergedQuestions = [
+      ...baseChapter.questions.map((question) => savedQuestionsById.get(question.id) ?? question),
+      ...savedExtraQuestions
+    ];
+
+    return {
+      ...baseChapter,
+      ...savedChapter,
+      source: savedChapter.source ?? baseChapter.source,
+      enabled: savedChapter.enabled !== false,
+      questions: mergedQuestions,
+      questionCount: mergedQuestions.length
+    };
+  });
+
+  const customChapters = savedChapters.filter((chapter) => !baseIds.has(chapter.id));
+  return normalizeBank([...mergedBase, ...customChapters]);
+};
+
+const loadQuestionBank = (): QuestionBankChapter[] => {
+  try {
+    const saved = window.localStorage.getItem(QUESTION_BANK_STORAGE_KEY);
+    if (!saved) return normalizeBank(baseQuestionBank);
+
+    const parsed = JSON.parse(saved) as QuestionBankChapter[];
+    if (!Array.isArray(parsed)) return normalizeBank(baseQuestionBank);
+
+    const migrated = mergeQuestionBank(parsed);
+    window.localStorage.setItem(QUESTION_BANK_STORAGE_KEY, JSON.stringify(migrated));
+    return migrated;
+  } catch {
+    return normalizeBank(baseQuestionBank);
+  }
+};
+
+const getHashSearchParams = () => {
+  const query = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+  return new URLSearchParams(query);
+};
+
+const isAdminLocation = () => {
+  const isAdminHash = window.location.hash.startsWith(ADMIN_ROUTE) || window.location.hash.startsWith('#/admin');
+  if (!isAdminHash) return false;
+  return getHashSearchParams().get('key') === ADMIN_ACCESS_KEY;
+};
+
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
 const HeartRain = () => {
-  const hearts = Array.from({ length: 40 });
+  const hearts = useMemo(
+    () =>
+      Array.from({ length: 28 }, () => ({
+        left: `${Math.random() * 100}%`,
+        scale: Math.random() * 0.5 + 0.45,
+        rotate: Math.random() * 360,
+        duration: Math.random() * 3 + 2.5,
+        delay: Math.random() * 4,
+        size: Math.random() * 18 + 18
+      })),
+    []
+  );
+
   return (
     <div className="fixed inset-0 pointer-events-none z-[100] overflow-hidden">
-      {hearts.map((_, i) => (
+      {hearts.map((heart, index) => (
         <motion.div
-          key={i}
-          initial={{ 
-            top: -50, 
-            left: `${Math.random() * 100}%`,
-            scale: Math.random() * 0.5 + 0.5,
-            opacity: 1,
-            rotate: Math.random() * 360
-          }}
-          animate={{ 
-            top: '110%',
-            rotate: Math.random() * 360 + 360,
-          }}
-          transition={{ 
-            duration: Math.random() * 3 + 2,
-            repeat: i % 2 === 0 ? Infinity : 0,
-            ease: "linear",
-            delay: Math.random() * 5
-          }}
+          key={index}
+          initial={{ top: -60, left: heart.left, scale: heart.scale, opacity: 0.95, rotate: heart.rotate }}
+          animate={{ top: '110%', rotate: heart.rotate + 360 }}
+          transition={{ duration: heart.duration, repeat: index % 2 === 0 ? Infinity : 0, ease: 'linear', delay: heart.delay }}
           className="absolute"
         >
-          <Heart className="text-red-500 fill-red-500" size={Math.random() * 20 + 20} />
+          <Heart className="text-red-500 fill-red-500 drop-shadow-sm" size={heart.size} />
         </motion.div>
       ))}
     </div>
   );
 };
 
-const CHAPTERS: Chapter[] = [
-  { id: 1, title: 'Chương 1', description: 'Việt Nam từ 1858 đến 1945', questionCount: chapter1Questions.length, enabled: true },
-  { id: 2, title: 'Chương 2', description: 'Đường lối kháng chiến & Cách mạng miền Nam (1945-1975)', questionCount: chapter2Questions.length, enabled: true },
-  { id: 3, title: 'Chương 3', description: 'Đảng lãnh đạo cả nước quá độ lên CNXH và tiến hành công cuộc đổi mới (Từ 1975 đến nay)', questionCount: chapter3Questions.length, enabled: true },
-];
-
 export default function App() {
-  const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [questionBank, setQuestionBank] = useState<QuestionBankChapter[]>(loadQuestionBank);
+  const [isAdminRoute, setIsAdminRoute] = useState(() => isAdminLocation());
+  const [selectedChapter, setSelectedChapter] = useState<QuestionBankChapter | null>(null);
   const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
 
+  const enabledChapters = useMemo(
+    () => normalizeBank(questionBank).filter((chapter) => chapter.enabled),
+    [questionBank]
+  );
+  const totalQuestions = useMemo(
+    () => enabledChapters.reduce((total, chapter) => total + chapter.questions.length, 0),
+    [enabledChapters]
+  );
+
   useEffect(() => {
-    let timer: number;
+    const handleRouteChange = () => setIsAdminRoute(isAdminLocation());
+    window.addEventListener('hashchange', handleRouteChange);
+    return () => window.removeEventListener('hashchange', handleRouteChange);
+  }, []);
+
+  useEffect(() => {
+    let timer: number | undefined;
+
     if (quizState && !quizState.isFinished) {
       timer = window.setInterval(() => {
         setElapsedTime(Math.floor((Date.now() - quizState.startTime) / 1000));
       }, 1000);
     }
-    return () => clearInterval(timer);
+
+    return () => {
+      if (timer) window.clearInterval(timer);
+    };
   }, [quizState?.startTime, quizState?.isFinished]);
 
-  const startQuiz = (chapter: Chapter, mode: QuizMode) => {
-    let questions: Question[] = [];
-    
-    if (chapter.id === 1) questions = [...chapter1Questions];
-    else if (chapter.id === 2) questions = [...chapter2Questions];
-    else if (chapter.id === 3) questions = [...chapter3Questions];
-    
+  const getQuestionsByChapter = (chapterId: number): Question[] => {
+    const chapter = questionBank.find((item) => item.id === chapterId);
+    return chapter ? [...chapter.questions] : [];
+  };
+
+  const saveQuestionBank = (chapters: QuestionBankChapter[]) => {
+    const normalized = normalizeBank(chapters);
+    window.localStorage.setItem(QUESTION_BANK_STORAGE_KEY, JSON.stringify(normalized));
+    setQuestionBank(normalized);
+    setSelectedChapter(null);
+    setQuizState(null);
+    setElapsedTime(0);
+  };
+
+  const resetDefaultQuestionBank = () => {
+    const normalized = normalizeBank(baseQuestionBank);
+    window.localStorage.removeItem(QUESTION_BANK_STORAGE_KEY);
+    setQuestionBank(normalized);
+    setSelectedChapter(null);
+    setQuizState(null);
+    setElapsedTime(0);
+  };
+
+  const closeAdmin = () => {
+    window.location.hash = '';
+    setIsAdminRoute(false);
+  };
+
+  const startQuiz = (chapter: QuestionBankChapter, mode: QuizMode) => {
+    let questions = getQuestionsByChapter(chapter.id);
+
     if (mode === 'exam') {
-      questions = shuffle(questions).slice(0, 50);
+      questions = shuffle(questions).slice(0, Math.min(50, questions.length));
     }
 
     setQuizState({
@@ -97,67 +222,34 @@ export default function App() {
 
   const handleAnswer = (answer: string) => {
     if (!quizState) return;
-    
+
     const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
-    
-    const newUserAnswers = {
-      ...quizState.userAnswers,
-      [currentQuestion.id]: answer
-    };
 
     setQuizState({
       ...quizState,
-      userAnswers: newUserAnswers
-    });
-  };
-
-  const nextQuestion = () => {
-    if (!quizState) return;
-    if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
-      setQuizState({
-        ...quizState,
-        currentQuestionIndex: quizState.currentQuestionIndex + 1
-      });
-    } else {
-      finishQuiz();
-    }
-  };
-
-  const prevQuestion = () => {
-    if (!quizState || quizState.currentQuestionIndex === 0) return;
-    setQuizState({
-      ...quizState,
-      currentQuestionIndex: quizState.currentQuestionIndex - 1
-    });
-  };
-
-  const jumpToQuestion = (index: number) => {
-    if (!quizState) return;
-    setQuizState({
-      ...quizState,
-      currentQuestionIndex: index
+      userAnswers: {
+        ...quizState.userAnswers,
+        [currentQuestion.id]: answer
+      }
     });
   };
 
   const finishQuiz = async () => {
     if (!quizState) return;
-    
+
     let score = 0;
-    quizState.questions.forEach(q => {
-      if (quizState.userAnswers[q.id] === q.answer) {
+    quizState.questions.forEach((question) => {
+      if (quizState.userAnswers[question.id] === question.answer) {
         score++;
       }
     });
 
     const endTime = Date.now();
-    setQuizState({
-      ...quizState,
-      isFinished: true,
-      score,
-      endTime
-    });
+    const finalElapsedTime = Math.floor((endTime - quizState.startTime) / 1000);
 
-    // Auto send email result in background
+    setElapsedTime(finalElapsedTime);
+    setQuizState({ ...quizState, isFinished: true, score, endTime });
+
     try {
       fetch('/api/send-result', {
         method: 'POST',
@@ -168,14 +260,33 @@ export default function App() {
           mode: quizState.mode,
           score,
           totalQuestions: quizState.questions.length,
-          elapsedTime: formatTime(Math.floor((endTime - quizState.startTime) / 1000)),
+          elapsedTime: formatTime(finalElapsedTime),
           timestamp: endTime
         })
       });
     } catch (error) {
-      // Silent fail
       console.error('Failed to send email result:', error);
     }
+  };
+
+  const nextQuestion = () => {
+    if (!quizState) return;
+
+    if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
+      setQuizState({ ...quizState, currentQuestionIndex: quizState.currentQuestionIndex + 1 });
+    } else {
+      finishQuiz();
+    }
+  };
+
+  const prevQuestion = () => {
+    if (!quizState || quizState.currentQuestionIndex === 0) return;
+    setQuizState({ ...quizState, currentQuestionIndex: quizState.currentQuestionIndex - 1 });
+  };
+
+  const jumpToQuestion = (index: number) => {
+    if (!quizState) return;
+    setQuizState({ ...quizState, currentQuestionIndex: index });
   };
 
   const reset = () => {
@@ -184,149 +295,233 @@ export default function App() {
     setElapsedTime(0);
   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const stats = useMemo(() => {
     if (!quizState) return { answered: 0, correct: 0 };
-    let answered = Object.keys(quizState.userAnswers).length;
+
     let correct = 0;
-    quizState.questions.forEach(q => {
-      if (quizState.userAnswers[q.id] === q.answer) {
+    quizState.questions.forEach((question) => {
+      if (quizState.userAnswers[question.id] === question.answer) {
         correct++;
       }
     });
-    return { answered, correct };
-  }, [quizState?.userAnswers, quizState?.questions]);
+
+    return { answered: Object.keys(quizState.userAnswers).length, correct };
+  }, [quizState]);
+
+  if (isAdminRoute) {
+    return (
+      <AdminPage
+        chapters={questionBank}
+        onSave={saveQuestionBank}
+        onResetDefault={resetDefaultQuestionBank}
+        onBack={closeAdmin}
+      />
+    );
+  }
 
   if (!selectedChapter || !quizState) {
     return (
-      <div className="min-h-screen bg-bg font-sans text-text-main flex flex-col md:flex-row">
-        {/* Sidebar */}
-        <nav className="w-full md:w-20 bg-sidebar-bg flex md:flex-col items-center py-4 md:py-8 flex-shrink-0 px-4 md:px-0">
-          <div className="flex md:flex-col flex-wrap gap-3 md:gap-0 justify-center md:justify-start w-full">
-            {CHAPTERS.map(ch => (
-              <div 
-                key={ch.id}
-                className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center mb-0 md:mb-4 font-bold text-xs md:text-sm transition-all border-2 ${ch.enabled ? 'bg-white/10 text-white cursor-pointer hover:bg-white/20 border-white/5' : 'opacity-30 cursor-not-allowed text-white border-transparent'}`}
-              >
-                C{ch.id}
+      <div className="min-h-screen bg-bg text-text-main font-sans">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.16),transparent_32%),radial-gradient(circle_at_85%_15%,rgba(15,118,110,0.12),transparent_28%)]" />
+
+        <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:flex-row lg:gap-8 lg:py-8">
+          <aside className="mb-5 flex items-center justify-between rounded-[28px] border border-white/70 bg-sidebar-bg p-4 text-white shadow-[0_22px_70px_rgba(15,23,42,0.18)] lg:mb-0 lg:w-72 lg:flex-col lg:items-start lg:p-6">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-lg font-black text-sidebar-bg shadow-lg">LS</div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/55">Quiz App</p>
+                <h1 className="text-lg font-extrabold leading-tight">Lịch Sử Đảng</h1>
               </div>
-            ))}
-          </div>
-        </nav>
+            </div>
 
-        <main className="flex-1 p-6 md:p-12">
-          <header className="max-w-4xl mb-8 md:mb-12">
-            <motion.h1 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-3xl md:text-4xl font-bold tracking-tight mb-4"
-            >
-              Trắc-Nghiệm-Lịch-Sử-Đảng
-            </motion.h1>
-            <motion.p 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="text-text-dim md:text-lg"
-            >
-              Hệ thống ôn tập trắc nghiệm mật độ cao
-            </motion.p>
-          </header>
-
-          <div className="max-w-4xl grid gap-6">
-            {CHAPTERS.map((chapter, idx) => (
-              <motion.div
-                key={chapter.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className={`bg-card-bg rounded-2xl p-6 shadow-sm border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-6 ${!chapter.enabled ? 'opacity-60' : ''}`}
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-bold">{chapter.title}</h3>
-                    {chapter.enabled && <span className="px-2 py-0.5 bg-success/10 text-success text-[10px] font-bold uppercase rounded">Sẵn sàng</span>}
+            <div className="hidden w-full lg:block">
+              <div className="my-8 h-px bg-white/10" />
+              <div className="space-y-4">
+                <div className="rounded-3xl bg-white/10 p-4 backdrop-blur">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-white/70">
+                    <Target size={16} />
+                    Mục tiêu
                   </div>
-                  <p className="text-text-dim text-sm mb-4">{chapter.description}</p>
-                  <div className="flex gap-4 text-xs font-mono text-text-dim">
-                    <span className="flex items-center gap-1"><BookOpen size={14} /> {chapter.questionCount} Câu hỏi</span>
+                  <p className="text-sm leading-relaxed text-white/85">
+                    Ôn tập trọng tâm, luyện thi nhanh và theo dõi tiến độ rõ ràng trên mọi thiết bị.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-white/10 p-4">
+                    <p className="text-2xl font-black">{enabledChapters.length}</p>
+                    <p className="text-xs text-white/60">Chương</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 p-4">
+                    <p className="text-2xl font-black">{totalQuestions}</p>
+                    <p className="text-xs text-white/60">Câu hỏi</p>
                   </div>
                 </div>
-                
-                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                  {chapter.enabled ? (
-                    <>
-                      <button 
-                        onClick={() => startQuiz(chapter, 'study')}
-                        className="w-full sm:w-auto px-6 py-3 rounded-xl border-2 border-border hover:border-accent hover:text-accent transition-all font-bold text-sm"
-                      >
-                        Học tập
-                      </button>
-                      <button 
-                        onClick={() => startQuiz(chapter, 'exam')}
-                        className="w-full sm:w-auto px-6 py-3 rounded-xl bg-sidebar-bg text-white hover:bg-black transition-all font-bold text-sm flex items-center justify-center gap-2"
-                      >
-                        Thi thử (50 câu)
-                      </button>
-                    </>
-                  ) : (
-                    <span className="px-6 py-3 bg-bg rounded-xl text-xs font-bold text-text-dim uppercase tracking-wider text-center">Sắp ra mắt</span>
-                  )}
+              </div>
+            </div>
+          </aside>
+
+          <main className="flex-1">
+            <section className="mb-6 overflow-hidden rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.10)] backdrop-blur sm:p-8 lg:p-10">
+              <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent/15 bg-accent/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-accent">
+                  <Award size={15} />
+                  Hệ thống ôn tập thông minh
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
+                  <div>
+                    <h2 className="max-w-3xl text-3xl font-black tracking-tight text-text-main sm:text-4xl lg:text-5xl">
+                      Ôn tập Lịch sử Đảng rõ ràng, hiện đại và dễ dùng.
+                    </h2>
+                    <p className="mt-4 max-w-2xl text-base leading-8 text-text-dim sm:text-lg">
+                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Giao diện tối ưu cho điện thoại, máy tính bảng và desktop.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 rounded-3xl border border-border bg-bg/70 p-3">
+                    <div className="rounded-2xl bg-white p-3 text-center shadow-sm">
+                      <BookOpen className="mx-auto mb-2 text-accent" size={18} />
+                      <p className="text-lg font-black">{totalQuestions}</p>
+                      <p className="text-[11px] text-text-dim">Câu hỏi</p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-3 text-center shadow-sm">
+                      <Clock className="mx-auto mb-2 text-accent" size={18} />
+                      <p className="text-lg font-black">50</p>
+                      <p className="text-[11px] text-text-dim">Câu thi</p>
+                    </div>
+                    <div className="rounded-2xl bg-white p-3 text-center shadow-sm">
+                      <CheckCircle2 className="mx-auto mb-2 text-success" size={18} />
+                      <p className="text-lg font-black">{enabledChapters.length}</p>
+                      <p className="text-[11px] text-text-dim">Chương</p>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
-            ))}
-          </div>
-        </main>
+            </section>
+
+            <section className="grid gap-4 lg:gap-5">
+              {enabledChapters.map((chapter, index) => (
+                <motion.article
+                  key={chapter.id}
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.08 }}
+                  className="group rounded-[28px] border border-white/80 bg-card-bg p-5 shadow-[0_16px_55px_rgba(15,23,42,0.07)] transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_75px_rgba(15,23,42,0.11)] sm:p-6"
+                >
+                  <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                    <div className="flex gap-4">
+                      <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-sidebar-bg text-base font-black text-white shadow-lg">
+                        C{chapter.id}
+                      </div>
+                      <div>
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <h3 className="text-xl font-black">{chapter.title}</h3>
+                          <span className="rounded-full bg-success/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-success">
+                            Sẵn sàng
+                          </span>
+                        </div>
+                        <p className="max-w-2xl text-sm leading-6 text-text-dim">{chapter.description}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-bg px-3 py-1.5 text-xs font-bold text-text-dim">
+                            <BookOpen size={14} />
+                            {chapter.questions.length} câu hỏi
+                          </span>
+                          {chapter.source && (
+                            <span className="rounded-full bg-accent/10 px-3 py-1.5 text-xs font-bold text-accent">{chapter.source}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2 md:min-w-[300px]">
+                      <button
+                        type="button"
+                        onClick={() => startQuiz(chapter, 'study')}
+                        className="rounded-2xl border border-border bg-white px-5 py-3 text-sm font-extrabold text-text-main transition-all hover:border-accent hover:text-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+                      >
+                        Học từng câu
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startQuiz(chapter, 'exam')}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sidebar-bg px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-slate-950 focus:outline-none focus:ring-4 focus:ring-accent/20"
+                      >
+                        Thi thử
+                        <ChevronRight size={17} />
+                      </button>
+                    </div>
+                  </div>
+                </motion.article>
+              ))}
+            </section>
+          </main>
+        </div>
       </div>
     );
   }
 
   if (quizState.isFinished) {
-    return (
-      <div className="min-h-screen bg-bg font-sans p-4 flex items-center justify-center overflow-y-auto custom-scrollbar">
-        <HeartRain />
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-card-bg rounded-[32px] p-6 md:p-12 shadow-xl border border-border max-w-xl w-full text-center my-auto"
-        >
-          <div className="w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Trophy className="text-success" size={40} />
-          </div>
-          <h2 className="text-3xl font-bold mb-2">Kết Quả {quizState.mode === 'exam' ? 'Thi Thử' : 'Ôn Tập'}</h2>
-          <p className="text-text-dim mb-8">{selectedChapter.title}</p>
-          
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="bg-bg rounded-2xl p-6 border border-border">
-              <p className="text-xs font-bold text-text-dim uppercase tracking-widest mb-2">Điểm số</p>
-              <p className="text-3xl font-bold text-accent">{quizState.score} <span className="text-lg text-text-dim font-normal">/ {quizState.questions.length}</span></p>
-            </div>
-            <div className="bg-bg rounded-2xl p-6 border border-border">
-              <p className="text-xs font-bold text-text-dim uppercase tracking-widest mb-2">Thời gian</p>
-              <p className="text-3xl font-bold">{formatTime(elapsedTime)}</p>
-            </div>
-          </div>
+    const finalElapsedSeconds = quizState.endTime ? Math.floor((quizState.endTime - quizState.startTime) / 1000) : elapsedTime;
+    const percent = Math.round((quizState.score / quizState.questions.length) * 100);
 
-          <div className="flex flex-col gap-3">
-            <button 
-              onClick={() => startQuiz(selectedChapter, quizState.mode)}
-              className="w-full py-4 rounded-2xl bg-sidebar-bg text-white font-bold hover:bg-black transition-all flex items-center justify-center gap-2"
-            >
-              <RotateCcw size={18} /> Thử lại
-            </button>
-            <button 
-              onClick={reset}
-              className="w-full py-4 rounded-2xl border-2 border-border font-bold hover:border-text-main transition-all flex items-center justify-center gap-2"
-            >
-              <Home size={18} /> Về trang chủ
-            </button>
-          </div>
-        </motion.div>
+    return (
+      <div className="min-h-screen bg-bg p-4 text-text-main font-sans sm:p-6">
+        <HeartRain />
+        <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-2xl items-center justify-center">
+          <motion.section
+            initial={{ opacity: 0, scale: 0.96, y: 18 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full rounded-[36px] border border-white/80 bg-card-bg p-6 text-center shadow-[0_28px_90px_rgba(15,23,42,0.13)] sm:p-10"
+          >
+            <div className="mx-auto mb-6 grid h-20 w-20 place-items-center rounded-[28px] bg-success/10">
+              <Trophy className="text-success" size={42} />
+            </div>
+
+            <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.22em] text-accent">
+              {quizState.mode === 'exam' ? 'Kết quả thi thử' : 'Kết quả ôn tập'}
+            </p>
+            <h2 className="text-3xl font-black tracking-tight sm:text-4xl">{selectedChapter.title}</h2>
+            <p className="mt-3 text-sm leading-6 text-text-dim">{selectedChapter.description}</p>
+
+            <div className="my-8 grid grid-cols-3 gap-3">
+              <div className="rounded-3xl border border-border bg-bg p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-text-dim">Điểm</p>
+                <p className="mt-2 text-2xl font-black text-accent">
+                  {quizState.score}
+                  <span className="text-sm font-semibold text-text-dim">/{quizState.questions.length}</span>
+                </p>
+              </div>
+              <div className="rounded-3xl border border-border bg-bg p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-text-dim">Tỷ lệ</p>
+                <p className="mt-2 text-2xl font-black">{percent}%</p>
+              </div>
+              <div className="rounded-3xl border border-border bg-bg p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-text-dim">Thời gian</p>
+                <p className="mt-2 text-2xl font-black">{formatTime(finalElapsedSeconds)}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => startQuiz(selectedChapter, quizState.mode)}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-sidebar-bg px-5 py-4 font-extrabold text-white transition-all hover:bg-slate-950 focus:outline-none focus:ring-4 focus:ring-accent/20"
+              >
+                <RotateCcw size={18} />
+                Làm lại
+              </button>
+              <button
+                type="button"
+                onClick={reset}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-white px-5 py-4 font-extrabold transition-all hover:border-text-main focus:outline-none focus:ring-4 focus:ring-slate-200"
+              >
+                <Home size={18} />
+                Về trang chủ
+              </button>
+            </div>
+          </motion.section>
+        </div>
       </div>
     );
   }
@@ -336,188 +531,236 @@ export default function App() {
   const userAnswer = quizState.userAnswers[currentQuestion.id];
 
   return (
-    <div className="min-h-screen bg-bg font-sans text-text-main flex flex-col lg:flex-row">
-      {/* Sidebar - Hidden on mobile or moved to bottom/top */}
-      <nav className="w-full lg:w-20 bg-sidebar-bg flex lg:flex-col items-center py-4 lg:py-8 flex-shrink-0 px-4 lg:px-0 border-b lg:border-b-0 border-white/5">
-        <div className="flex lg:flex-col items-center justify-between lg:justify-start w-full gap-4">
-          <div 
-            onClick={reset}
-            className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl bg-accent flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
-          >
-            <Home className="text-white" size={18} />
-          </div>
+    <div className="min-h-screen bg-bg text-text-main font-sans">
+      <div className="mx-auto flex min-h-screen max-w-[1500px] flex-col lg:flex-row">
+        <aside className="sticky top-0 z-30 border-b border-white/70 bg-sidebar-bg/95 px-4 py-3 text-white shadow-lg backdrop-blur lg:min-h-screen lg:w-24 lg:border-b-0 lg:px-0 lg:py-6">
+          <div className="flex items-center justify-between gap-3 lg:h-full lg:flex-col">
+            <button
+              type="button"
+              onClick={reset}
+              className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-sidebar-bg shadow-md transition-transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-white/20 lg:h-12 lg:w-12"
+              aria-label="Về trang chủ"
+            >
+              <Home size={19} />
+            </button>
 
-          <div 
-            onClick={() => {
-              if (Object.keys(quizState.userAnswers).length > 0) {
-                if (window.confirm("Bạn có chắc chắn muốn nộp bài và kết thúc ngay bây giờ không?")) {
+            <div className="flex items-center gap-2 lg:flex-col">
+              {enabledChapters.map((chapter) => (
+                <div
+                  key={chapter.id}
+                  className={`grid h-10 w-10 place-items-center rounded-2xl border text-xs font-black transition-all lg:h-12 lg:w-12 lg:text-sm ${
+                    chapter.id === selectedChapter.id
+                      ? 'border-accent bg-accent text-white shadow-lg shadow-blue-500/20'
+                      : 'border-white/10 bg-white/10 text-white/45'
+                  }`}
+                >
+                  C{chapter.id}
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (Object.keys(quizState.userAnswers).length > 0) {
+                  if (window.confirm('Bạn có chắc chắn muốn nộp bài và kết thúc ngay bây giờ không?')) {
+                    finishQuiz();
+                  }
+                } else {
                   finishQuiz();
                 }
-              } else {
-                finishQuiz();
-              }
-            }}
-            className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl bg-sidebar-bg border-2 border-white/10 flex items-center justify-center cursor-pointer hover:bg-black transition-all"
-            title="Nộp bài và kết thúc"
-          >
-            <CheckCircle2 className="text-success" size={18} />
+              }}
+              className="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/10 text-success transition-all hover:bg-white/15 focus:outline-none focus:ring-4 focus:ring-white/15 lg:h-12 lg:w-12"
+              aria-label="Nộp bài"
+            >
+              <CheckCircle2 size={20} />
+            </button>
           </div>
+        </aside>
 
-          <div className="flex lg:flex-col gap-2">
-            {CHAPTERS.map(ch => (
-              <div 
-                key={ch.id}
-                className={`w-10 h-10 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center font-bold text-xs lg:text-sm transition-all border-2 ${ch.id === selectedChapter.id ? 'bg-accent border-accent text-white' : 'bg-white/10 border-transparent text-white/40 cursor-not-allowed'}`}
-              >
-                C{ch.id}
+        <main className="flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+          <header className="mb-5 rounded-[28px] border border-white/75 bg-white/85 p-4 shadow-[0_16px_55px_rgba(15,23,42,0.07)] backdrop-blur sm:p-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0">
+                <p className="mb-1 text-xs font-extrabold uppercase tracking-[0.2em] text-accent">
+                  {quizState.mode === 'exam' ? 'Chế độ thi thử' : 'Chế độ học tập'}
+                </p>
+                <h1 className="truncate text-xl font-black tracking-tight sm:text-2xl">
+                  {selectedChapter.title} · {selectedChapter.description}
+                </h1>
               </div>
-            ))}
-          </div>
-        </div>
-      </nav>
 
-      <main className="flex-1 flex flex-col p-4 lg:p-6 gap-4 lg:gap-6">
-        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:h-10 flex-shrink-0">
-          <div className="title-area truncate max-w-full">
-            <h1 className="text-lg lg:text-xl font-bold truncate">{selectedChapter.title} - {selectedChapter.description}</h1>
-          </div>
-          <div className="flex flex-wrap gap-4 lg:gap-8 text-[10px] lg:text-sm font-bold bg-white/50 lg:bg-transparent p-2 lg:p-0 rounded-lg w-full sm:w-auto">
-            <div className="flex items-center gap-2">
-              <span className="text-text-dim font-normal">Thời gian:</span>
-              <span className="font-mono">{formatTime(elapsedTime)}</span>
+              <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                <div className="rounded-2xl bg-bg px-3 py-2 text-center sm:min-w-28">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Thời gian</p>
+                  <p className="font-mono text-sm font-black">{formatTime(elapsedTime)}</p>
+                </div>
+                <div className="rounded-2xl bg-bg px-3 py-2 text-center sm:min-w-28">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Đã làm</p>
+                  <p className="text-sm font-black">
+                    {stats.answered}/{quizState.questions.length}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-bg px-3 py-2 text-center sm:min-w-28">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-text-dim">
+                    {quizState.mode === 'study' ? 'Đúng' : 'Tiến độ'}
+                  </p>
+                  <p className="text-sm font-black text-success">
+                    {quizState.mode === 'study' ? stats.correct : `${Math.round(progress)}%`}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-text-dim font-normal">Đã làm:</span>
-              <span>{stats.answered}/{quizState.questions.length}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-text-dim font-normal">Đúng:</span>
-              <span className="text-success">{stats.correct}</span>
-            </div>
-          </div>
-        </header>
 
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-          {/* Question Card */}
-          <div className="bg-card-bg rounded-2xl p-6 lg:p-10 shadow-sm border border-border flex flex-col custom-scrollbar">
-            <div className="text-accent text-[10px] font-extrabold uppercase tracking-[2px] mb-4">
-              Câu hỏi {quizState.currentQuestionIndex + 1} của {quizState.questions.length}
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-border">
+              <motion.div className="h-full bg-accent" initial={{ width: 0 }} animate={{ width: `${progress}%` }} />
             </div>
-            
-            <h2 className="text-xl lg:text-2xl font-semibold leading-snug mb-6 lg:mb-10">
-              {currentQuestion.text}
-            </h2>
+          </header>
 
-            <div className="grid gap-3 mb-6 lg:mb-10">
-              {(Object.entries(currentQuestion.options) as [string, string][]).map(([key, value]) => {
-                const isSelected = userAnswer === key;
-                const isCorrect = key === currentQuestion.answer;
-                const showFeedback = userAnswer !== undefined;
-                
-                let buttonClass = "w-full text-left p-4 lg:p-5 rounded-xl border-2 transition-all flex items-center gap-4 group ";
-                
-                if (!showFeedback) {
-                  buttonClass += "border-border hover:border-accent hover:bg-accent/5";
-                } else {
-                  if (isCorrect) {
-                     buttonClass += "border-success bg-success/5 text-success";
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <section className="rounded-[32px] border border-white/80 bg-card-bg p-5 shadow-[0_24px_80px_rgba(15,23,42,0.09)] sm:p-7 lg:p-9">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <span className="rounded-full bg-accent/10 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.18em] text-accent">
+                  Câu {quizState.currentQuestionIndex + 1}/{quizState.questions.length}
+                </span>
+                <span className="rounded-full bg-bg px-4 py-2 text-xs font-bold text-text-dim">
+                  {quizState.mode === 'study' ? 'Hiển thị đáp án sau khi chọn' : 'Không hiện đáp án khi thi'}
+                </span>
+              </div>
+
+              <h2 className="mb-7 text-xl font-bold leading-8 tracking-tight sm:text-2xl sm:leading-9 lg:text-[28px] lg:leading-10">
+                {currentQuestion.text}
+              </h2>
+
+              <div className="grid gap-3 sm:gap-4">
+                {(Object.entries(currentQuestion.options) as [string, string][]).map(([key, value]) => {
+                  const isSelected = userAnswer === key;
+                  const isCorrect = key === currentQuestion.answer;
+                  const hasAnswered = userAnswer !== undefined;
+                  const showFeedback = quizState.mode === 'study' && hasAnswered;
+                  const isLocked = quizState.mode === 'study' && hasAnswered;
+
+                  let buttonClass =
+                    'w-full rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 sm:p-5 ';
+
+                  if (!hasAnswered) {
+                    buttonClass += 'border-border bg-white hover:border-accent hover:bg-accent/5';
+                  } else if (showFeedback) {
+                    if (isCorrect) {
+                      buttonClass += 'border-success bg-success/10 text-success';
+                    } else if (isSelected) {
+                      buttonClass += 'border-red-500 bg-red-50 text-red-700';
+                    } else {
+                      buttonClass += 'border-border bg-white opacity-55';
+                    }
                   } else if (isSelected) {
-                     buttonClass += "border-red-500 bg-red-50 text-red-700";
+                    buttonClass += 'border-accent bg-accent/10 text-accent';
                   } else {
-                     buttonClass += "border-border opacity-50";
+                    buttonClass += 'border-border bg-white hover:border-accent hover:bg-accent/5';
                   }
-                }
 
-                return (
-                  <button
-                    key={key}
-                    disabled={showFeedback}
-                    onClick={() => handleAnswer(key)}
-                    className={buttonClass}
-                  >
-                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors ${!showFeedback ? 'bg-bg group-hover:bg-accent group-hover:text-white' : (isCorrect ? 'bg-success text-white' : (isSelected ? 'bg-red-500 text-white' : 'bg-bg'))}`}>
-                      {key}
-                    </span>
-                    <span className="font-medium text-sm lg:text-base">{value}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-auto">
-              <div className="h-1 w-full bg-border rounded-full overflow-hidden mb-6">
-                <motion.div 
-                  className="h-full bg-accent"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                />
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      disabled={isLocked}
+                      onClick={() => handleAnswer(key)}
+                      className={buttonClass}
+                    >
+                      <span className="flex items-start gap-4">
+                        <span
+                          className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-black transition-colors ${
+                            showFeedback && isCorrect
+                              ? 'bg-success text-white'
+                              : showFeedback && isSelected
+                                ? 'bg-red-500 text-white'
+                                : isSelected
+                                  ? 'bg-accent text-white'
+                                  : 'bg-bg text-text-dim'
+                          }`}
+                        >
+                          {key}
+                        </span>
+                        <span className="pt-1 text-sm font-semibold leading-6 sm:text-base">{value}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
-              <footer className="flex justify-between items-center gap-4">
+              <footer className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <button
+                  type="button"
                   onClick={prevQuestion}
                   disabled={quizState.currentQuestionIndex === 0}
-                  className="flex-1 lg:flex-none px-4 lg:px-6 py-3 rounded-xl font-bold text-text-dim hover:text-text-main disabled:opacity-30 transition-colors flex items-center justify-center gap-2 text-sm"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-white px-5 py-3 text-sm font-extrabold transition-all hover:border-text-main disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-4 focus:ring-slate-200"
                 >
-                  <ChevronLeft size={18} /> <span className="hidden sm:inline">Quay lại</span>
+                  <ChevronLeft size={18} />
+                  Quay lại
                 </button>
 
                 <button
+                  type="button"
                   onClick={nextQuestion}
                   disabled={userAnswer === undefined}
-                  className="flex-1 lg:flex-none px-4 lg:px-8 py-3 rounded-xl bg-sidebar-bg text-white font-bold hover:bg-black disabled:opacity-30 transition-all flex items-center justify-center gap-2 text-sm"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sidebar-bg px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-slate-900/10 transition-all hover:bg-slate-950 disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-4 focus:ring-accent/20"
                 >
-                  <span className="truncate">{quizState.currentQuestionIndex === quizState.questions.length - 1 ? 'Kết thúc' : 'Tiếp theo'}</span>
+                  {quizState.currentQuestionIndex === quizState.questions.length - 1 ? 'Kết thúc' : 'Tiếp theo'}
                   <ChevronRight size={18} />
                 </button>
               </footer>
-            </div>
-          </div>
+            </section>
 
-          {/* Question Map - Hidden on small mobile screens or shown via toggle maybe? For now just place below in grid */}
-          <div className="bg-card-bg rounded-2xl p-6 shadow-sm border border-border flex flex-col max-h-[300px] lg:max-h-full">
-            <div className="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wider text-text-dim mb-4">
-              <span>Bản đồ câu hỏi</span>
-              <span className="text-accent">{Math.round(progress)}%</span>
-            </div>
-            
-            <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-8 gap-2 overflow-y-auto pr-2 custom-scrollbar">
-              {quizState.questions.map((q, idx) => {
-                const isAnswered = quizState.userAnswers[q.id] !== undefined;
-                const isCurrent = idx === quizState.currentQuestionIndex;
-                const isCorrect = isAnswered && quizState.userAnswers[q.id] === q.answer;
-                
-                let dotClass = "aspect-square rounded-md border flex items-center justify-center text-[10px] font-bold transition-all cursor-pointer ";
-                
-                if (isAnswered) {
-                  if (isCorrect) {
-                    dotClass += "bg-success border-success text-white";
+            <aside className="rounded-[32px] border border-white/80 bg-card-bg p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)] lg:sticky lg:top-7 lg:max-h-[calc(100vh-3.5rem)]">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-text-dim">Bản đồ câu hỏi</p>
+                  <p className="mt-1 text-sm text-text-dim">Chạm để chuyển câu nhanh</p>
+                </div>
+                <div className="rounded-2xl bg-accent/10 px-3 py-2 text-sm font-black text-accent">
+                  {Math.round(progress)}%
+                </div>
+              </div>
+
+              <div className="grid max-h-[310px] grid-cols-6 gap-2 overflow-y-auto pr-1 custom-scrollbar sm:grid-cols-8 lg:max-h-[calc(100vh-11rem)] lg:grid-cols-6">
+                {quizState.questions.map((question, index) => {
+                  const isAnswered = quizState.userAnswers[question.id] !== undefined;
+                  const isCurrent = index === quizState.currentQuestionIndex;
+                  const isCorrect = isAnswered && quizState.userAnswers[question.id] === question.answer;
+
+                  let dotClass =
+                    'aspect-square rounded-xl border text-[11px] font-black transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 ';
+
+                  if (quizState.mode === 'study' && isAnswered) {
+                    dotClass += isCorrect
+                      ? 'border-success bg-success text-white'
+                      : 'border-red-500 bg-red-500 text-white';
+                  } else if (isAnswered) {
+                    dotClass += 'border-accent bg-accent/10 text-accent';
                   } else {
-                    dotClass += "bg-red-500 border-red-500 text-white";
+                    dotClass += 'border-border bg-bg text-text-dim hover:border-accent';
                   }
-                  if (isCurrent) {
-                    dotClass += " ring-2 ring-offset-2 ring-accent scale-110 z-10";
-                  }
-                } else if (isCurrent) {
-                  dotClass += "bg-accent border-accent text-white ring-2 ring-offset-2 ring-accent scale-110 z-10";
-                } else {
-                  dotClass += "bg-bg border-border text-text-dim hover:border-accent";
-                }
 
-                return (
-                  <div 
-                    key={q.id}
-                    onClick={() => jumpToQuestion(idx)}
-                    className={dotClass}
-                  >
-                    {idx + 1}
-                  </div>
-                );
-              })}
-            </div>
+                  if (isCurrent) {
+                    dotClass += ' ring-2 ring-accent ring-offset-2 scale-105';
+                  }
+
+                  return (
+                    <button
+                      key={question.id}
+                      type="button"
+                      onClick={() => jumpToQuestion(index)}
+                      className={dotClass}
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

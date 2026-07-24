@@ -1,14 +1,26 @@
 {
-  "name": "react-example",
+  "name": "lich-su-dang-quiz",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Ứng dụng ôn thi Lịch sử Đảng với quiz, trắc nghiệm theo chương và chế độ thi thử.",
+  "keywords": [
+    "Lịch sử Đảng",
+    "trắc nghiệm Lịch sử Đảng",
+    "ôn thi Lịch sử Đảng",
+    "câu hỏi Lịch sử Đảng",
+    "quiz Lịch sử Đảng",
+    "thi thử Lịch sử Đảng",
+    "Lịch sử Đảng Cộng sản Việt Nam"
+  ],
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "clean": "rm -rf dist android",
+    "lint": "tsc --noEmit",
+    "prepare:capacitor": "npm install --no-save @capacitor/cli@7.4.3 @capacitor/core@7.4.3 @capacitor/android@7.4.3",
+    "apk:debug": "npm run build && npm run prepare:capacitor && rm -rf android && npx cap add android && npx cap sync android && cd android && chmod +x gradlew && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

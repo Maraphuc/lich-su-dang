@@ -1,39 +1,74 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  
-  --color-bg: #f4f7f6;
-  --color-sidebar-bg: #1e272e;
+
+  --color-bg: #eef3f8;
+  --color-sidebar-bg: #0f172a;
   --color-card-bg: #ffffff;
-  --color-accent: #0984e3;
-  --color-text-main: #2d3436;
-  --color-text-dim: #636e72;
-  --color-success: #00b894;
-  --color-border: #dfe6e9;
+  --color-accent: #2563eb;
+  --color-text-main: #111827;
+  --color-text-dim: #64748b;
+  --color-success: #059669;
+  --color-border: #e2e8f0;
 }
 
-body {
-  @apply antialiased bg-bg text-text-main;
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply antialiased bg-bg text-text-main;
+    margin: 0;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button {
+    touch-action: manipulation;
+  }
+
+  ::selection {
+    @apply bg-accent/20 text-text-main;
+  }
 }
 
 @utility custom-scrollbar {
   &::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
   }
+
   &::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
+
   &::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full hover:bg-text-dim/30 transition-colors;
+    @apply bg-border rounded-full hover:bg-text-dim/40 transition-colors;
   }
 }
 
-@layer base {
-  html, body, #root {
-    min-height: 100%;
+@media (max-width: 640px) {
+  body {
+    overscroll-behavior-y: contain;
   }
 }
