@@ -2,6 +2,16 @@
   "name": "lich-su-dang-quiz",
   "private": true,
   "version": "0.1.0",
+  "description": "Ứng dụng ôn thi Lịch sử Đảng với quiz, trắc nghiệm theo chương và chế độ thi thử.",
+  "keywords": [
+    "Lịch sử Đảng",
+    "trắc nghiệm Lịch sử Đảng",
+    "ôn thi Lịch sử Đảng",
+    "câu hỏi Lịch sử Đảng",
+    "quiz Lịch sử Đảng",
+    "thi thử Lịch sử Đảng",
+    "Lịch sử Đảng Cộng sản Việt Nam"
+  ],
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
