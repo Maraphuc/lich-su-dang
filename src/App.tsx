@@ -131,7 +131,7 @@ export default function App() {
   }, [quizState?.startTime, quizState?.isFinished]);
 
   const startQuiz = (chapter: Chapter, mode: QuizMode) => {
-    let questions = getQuestionsByChapter(chapter.id);
+    let questions = getQuestionsByChapter(Number(chapter.id));
 
     if (mode === 'exam') {
       questions = shuffle(questions).slice(0, 50);
