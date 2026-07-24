@@ -22,14 +22,14 @@ export interface QuizState {
   userAnswers: Record<number, string>;
   isFinished: boolean;
   score: number;
-  startTime: number | null;
+  startTime: number;
   endTime: number | null;
   mode: QuizMode;
   questions: Question[];
 }
 
 export interface Chapter {
-  id: number | string;
+  id: number;
   title: string;
   description: string;
   questionCount: number;
