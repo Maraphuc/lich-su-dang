@@ -9,14 +9,16 @@ import {
   Heart,
   Home,
   RotateCcw,
+  Settings,
   Target,
   Trophy
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { chapter1Questions } from './data/chapter1';
-import { chapter2Questions } from './data/chapter2';
-import { chapter3Questions } from './data/chapter3';
-import { Chapter, Question, QuizMode, QuizState } from './types';
+import { AdminPage } from './AdminPage';
+import { baseQuestionBank } from './data/questionBank';
+import { Chapter, Question, QuestionBankChapter, QuizMode, QuizState } from './types';
+
+const QUESTION_BANK_STORAGE_KEY = 'lich-su-dang-question-bank-v1';
 
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -27,37 +29,23 @@ const shuffle = <T,>(array: T[]): T[] => {
   return newArray;
 };
 
-const CHAPTERS: Chapter[] = [
-  {
-    id: 1,
-    title: 'Chương 1',
-    description: 'Việt Nam từ 1858 đến 1945',
-    questionCount: chapter1Questions.length,
-    enabled: true
-  },
-  {
-    id: 2,
-    title: 'Chương 2',
-    description: 'Đường lối kháng chiến & Cách mạng miền Nam (1945-1975)',
-    questionCount: chapter2Questions.length,
-    enabled: true
-  },
-  {
-    id: 3,
-    title: 'Chương 3',
-    description: 'Đảng lãnh đạo cả nước quá độ lên CNXH và tiến hành công cuộc đổi mới (Từ 1975 đến nay)',
-    questionCount: chapter3Questions.length,
-    enabled: true
+const normalizeBank = (chapters: QuestionBankChapter[]): QuestionBankChapter[] =>
+  chapters.map((chapter) => ({
+    ...chapter,
+    enabled: chapter.enabled !== false,
+    questionCount: chapter.questions.length
+  }));
+
+const loadQuestionBank = (): QuestionBankChapter[] => {
+  try {
+    const saved = window.localStorage.getItem(QUESTION_BANK_STORAGE_KEY);
+    if (!saved) return normalizeBank(baseQuestionBank);
+    const parsed = JSON.parse(saved) as QuestionBankChapter[];
+    if (!Array.isArray(parsed)) return normalizeBank(baseQuestionBank);
+    return normalizeBank(parsed);
+  } catch {
+    return normalizeBank(baseQuestionBank);
   }
-];
-
-const TOTAL_QUESTIONS = CHAPTERS.reduce((total, chapter) => total + chapter.questionCount, 0);
-
-const getQuestionsByChapter = (chapterId: number): Question[] => {
-  if (chapterId === 1) return [...chapter1Questions];
-  if (chapterId === 2) return [...chapter2Questions];
-  if (chapterId === 3) return [...chapter3Questions];
-  return [];
 };
 
 const formatTime = (seconds: number) => {
@@ -85,23 +73,9 @@ const HeartRain = () => {
       {hearts.map((heart, index) => (
         <motion.div
           key={index}
-          initial={{
-            top: -60,
-            left: heart.left,
-            scale: heart.scale,
-            opacity: 0.95,
-            rotate: heart.rotate
-          }}
-          animate={{
-            top: '110%',
-            rotate: heart.rotate + 360
-          }}
-          transition={{
-            duration: heart.duration,
-            repeat: index % 2 === 0 ? Infinity : 0,
-            ease: 'linear',
-            delay: heart.delay
-          }}
+          initial={{ top: -60, left: heart.left, scale: heart.scale, opacity: 0.95, rotate: heart.rotate }}
+          animate={{ top: '110%', rotate: heart.rotate + 360 }}
+          transition={{ duration: heart.duration, repeat: index % 2 === 0 ? Infinity : 0, ease: 'linear', delay: heart.delay }}
           className="absolute"
         >
           <Heart className="text-red-500 fill-red-500 drop-shadow-sm" size={heart.size} />
@@ -112,9 +86,26 @@ const HeartRain = () => {
 };
 
 export default function App() {
+  const [questionBank, setQuestionBank] = useState<QuestionBankChapter[]>(loadQuestionBank);
+  const [isAdminRoute, setIsAdminRoute] = useState(() => window.location.hash === '#/admin');
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+
+  const enabledChapters = useMemo(
+    () => normalizeBank(questionBank).filter((chapter) => chapter.enabled),
+    [questionBank]
+  );
+  const totalQuestions = useMemo(
+    () => enabledChapters.reduce((total, chapter) => total + chapter.questions.length, 0),
+    [enabledChapters]
+  );
+
+  useEffect(() => {
+    const handleHashChange = () => setIsAdminRoute(window.location.hash === '#/admin');
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -130,11 +121,44 @@ export default function App() {
     };
   }, [quizState?.startTime, quizState?.isFinished]);
 
+  const getQuestionsByChapter = (chapterId: number): Question[] => {
+    const chapter = questionBank.find((item) => item.id === chapterId);
+    return chapter ? [...chapter.questions] : [];
+  };
+
+  const saveQuestionBank = (chapters: QuestionBankChapter[]) => {
+    const normalized = normalizeBank(chapters);
+    window.localStorage.setItem(QUESTION_BANK_STORAGE_KEY, JSON.stringify(normalized));
+    setQuestionBank(normalized);
+    setSelectedChapter(null);
+    setQuizState(null);
+    setElapsedTime(0);
+  };
+
+  const resetDefaultQuestionBank = () => {
+    const normalized = normalizeBank(baseQuestionBank);
+    window.localStorage.removeItem(QUESTION_BANK_STORAGE_KEY);
+    setQuestionBank(normalized);
+    setSelectedChapter(null);
+    setQuizState(null);
+    setElapsedTime(0);
+  };
+
+  const openAdmin = () => {
+    window.location.hash = '#/admin';
+    setIsAdminRoute(true);
+  };
+
+  const closeAdmin = () => {
+    window.location.hash = '';
+    setIsAdminRoute(false);
+  };
+
   const startQuiz = (chapter: Chapter, mode: QuizMode) => {
     let questions = getQuestionsByChapter(Number(chapter.id));
 
     if (mode === 'exam') {
-      questions = shuffle(questions).slice(0, 50);
+      questions = shuffle(questions).slice(0, Math.min(50, questions.length));
     }
 
     setQuizState({
@@ -165,37 +189,6 @@ export default function App() {
     });
   };
 
-  const nextQuestion = () => {
-    if (!quizState) return;
-
-    if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
-      setQuizState({
-        ...quizState,
-        currentQuestionIndex: quizState.currentQuestionIndex + 1
-      });
-    } else {
-      finishQuiz();
-    }
-  };
-
-  const prevQuestion = () => {
-    if (!quizState || quizState.currentQuestionIndex === 0) return;
-
-    setQuizState({
-      ...quizState,
-      currentQuestionIndex: quizState.currentQuestionIndex - 1
-    });
-  };
-
-  const jumpToQuestion = (index: number) => {
-    if (!quizState) return;
-
-    setQuizState({
-      ...quizState,
-      currentQuestionIndex: index
-    });
-  };
-
   const finishQuiz = async () => {
     if (!quizState) return;
 
@@ -210,12 +203,7 @@ export default function App() {
     const finalElapsedTime = Math.floor((endTime - quizState.startTime) / 1000);
 
     setElapsedTime(finalElapsedTime);
-    setQuizState({
-      ...quizState,
-      isFinished: true,
-      score,
-      endTime
-    });
+    setQuizState({ ...quizState, isFinished: true, score, endTime });
 
     try {
       fetch('/api/send-result', {
@@ -236,6 +224,26 @@ export default function App() {
     }
   };
 
+  const nextQuestion = () => {
+    if (!quizState) return;
+
+    if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
+      setQuizState({ ...quizState, currentQuestionIndex: quizState.currentQuestionIndex + 1 });
+    } else {
+      finishQuiz();
+    }
+  };
+
+  const prevQuestion = () => {
+    if (!quizState || quizState.currentQuestionIndex === 0) return;
+    setQuizState({ ...quizState, currentQuestionIndex: quizState.currentQuestionIndex - 1 });
+  };
+
+  const jumpToQuestion = (index: number) => {
+    if (!quizState) return;
+    setQuizState({ ...quizState, currentQuestionIndex: index });
+  };
+
   const reset = () => {
     setSelectedChapter(null);
     setQuizState(null);
@@ -252,11 +260,19 @@ export default function App() {
       }
     });
 
-    return {
-      answered: Object.keys(quizState.userAnswers).length,
-      correct
-    };
+    return { answered: Object.keys(quizState.userAnswers).length, correct };
   }, [quizState]);
+
+  if (isAdminRoute) {
+    return (
+      <AdminPage
+        chapters={questionBank}
+        onSave={saveQuestionBank}
+        onResetDefault={resetDefaultQuestionBank}
+        onBack={closeAdmin}
+      />
+    );
+  }
 
   if (!selectedChapter || !quizState) {
     return (
@@ -266,9 +282,7 @@ export default function App() {
         <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:flex-row lg:gap-8 lg:py-8">
           <aside className="mb-5 flex items-center justify-between rounded-[28px] border border-white/70 bg-sidebar-bg p-4 text-white shadow-[0_22px_70px_rgba(15,23,42,0.18)] lg:mb-0 lg:w-72 lg:flex-col lg:items-start lg:p-6">
             <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-lg font-black text-sidebar-bg shadow-lg">
-                LS
-              </div>
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-lg font-black text-sidebar-bg shadow-lg">LS</div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/55">Quiz App</p>
                 <h1 className="text-lg font-extrabold leading-tight">Lịch Sử Đảng</h1>
@@ -284,17 +298,17 @@ export default function App() {
                     Mục tiêu
                   </div>
                   <p className="text-sm leading-relaxed text-white/85">
-                    Ôn tập trọng tâm, luyện thi nhanh và theo dõi tiến độ rõ ràng trên mọi thiết bị.
+                    Ôn tập trọng tâm, luyện thi nhanh và quản lý ngân hàng câu hỏi theo chương.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-2xl bg-white/10 p-4">
-                    <p className="text-2xl font-black">{CHAPTERS.length}</p>
+                    <p className="text-2xl font-black">{enabledChapters.length}</p>
                     <p className="text-xs text-white/60">Chương</p>
                   </div>
                   <div className="rounded-2xl bg-white/10 p-4">
-                    <p className="text-2xl font-black">{TOTAL_QUESTIONS}</p>
+                    <p className="text-2xl font-black">{totalQuestions}</p>
                     <p className="text-xs text-white/60">Câu hỏi</p>
                   </div>
                 </div>
@@ -310,20 +324,20 @@ export default function App() {
                   Hệ thống ôn tập thông minh
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-[1fr_280px] lg:items-end">
+                <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
                   <div>
                     <h2 className="max-w-3xl text-3xl font-black tracking-tight text-text-main sm:text-4xl lg:text-5xl">
-                      Ôn tập Lịch sử Đảng rõ ràng, hiện đại và dễ dùng.
+                      Ôn tập Lịch sử Đảng rõ ràng, hiện đại và dễ mở rộng.
                     </h2>
                     <p className="mt-4 max-w-2xl text-base leading-8 text-text-dim sm:text-lg">
-                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Giao diện đã được tối ưu cho điện thoại, máy tính bảng và desktop.
+                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Có trang Admin để tạo chương mới, chỉnh sửa câu hỏi và export JSON.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3 rounded-3xl border border-border bg-bg/70 p-3">
                     <div className="rounded-2xl bg-white p-3 text-center shadow-sm">
                       <BookOpen className="mx-auto mb-2 text-accent" size={18} />
-                      <p className="text-lg font-black">{TOTAL_QUESTIONS}</p>
+                      <p className="text-lg font-black">{totalQuestions}</p>
                       <p className="text-[11px] text-text-dim">Câu hỏi</p>
                     </div>
                     <div className="rounded-2xl bg-white p-3 text-center shadow-sm">
@@ -333,24 +347,36 @@ export default function App() {
                     </div>
                     <div className="rounded-2xl bg-white p-3 text-center shadow-sm">
                       <CheckCircle2 className="mx-auto mb-2 text-success" size={18} />
-                      <p className="text-lg font-black">3</p>
+                      <p className="text-lg font-black">{enabledChapters.length}</p>
                       <p className="text-[11px] text-text-dim">Chương</p>
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={openAdmin}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-white px-5 py-3 text-sm font-extrabold transition-all hover:border-accent hover:text-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+                  >
+                    <Settings size={17} />
+                    Mở trang Admin
+                  </button>
+                  <span className="rounded-2xl bg-bg px-5 py-3 text-sm font-semibold text-text-dim">
+                    Admin lưu local trên thiết bị và có thể export JSON để cập nhật mã nguồn.
+                  </span>
                 </div>
               </motion.div>
             </section>
 
             <section className="grid gap-4 lg:gap-5">
-              {CHAPTERS.map((chapter, index) => (
+              {enabledChapters.map((chapter, index) => (
                 <motion.article
                   key={chapter.id}
                   initial={{ opacity: 0, y: 18 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.08 }}
-                  className={`group rounded-[28px] border border-white/80 bg-card-bg p-5 shadow-[0_16px_55px_rgba(15,23,42,0.07)] transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_75px_rgba(15,23,42,0.11)] sm:p-6 ${
-                    !chapter.enabled ? 'opacity-60' : ''
-                  }`}
+                  className="group rounded-[28px] border border-white/80 bg-card-bg p-5 shadow-[0_16px_55px_rgba(15,23,42,0.07)] transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_75px_rgba(15,23,42,0.11)] sm:p-6"
                 >
                   <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
                     <div className="flex gap-4">
@@ -360,44 +386,39 @@ export default function App() {
                       <div>
                         <div className="mb-2 flex flex-wrap items-center gap-2">
                           <h3 className="text-xl font-black">{chapter.title}</h3>
-                          {chapter.enabled && (
-                            <span className="rounded-full bg-success/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-success">
-                              Sẵn sàng
-                            </span>
-                          )}
+                          <span className="rounded-full bg-success/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-success">
+                            Sẵn sàng
+                          </span>
                         </div>
                         <p className="max-w-2xl text-sm leading-6 text-text-dim">{chapter.description}</p>
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-bg px-3 py-1.5 text-xs font-bold text-text-dim">
-                          <BookOpen size={14} />
-                          {chapter.questionCount} câu hỏi
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-bg px-3 py-1.5 text-xs font-bold text-text-dim">
+                            <BookOpen size={14} />
+                            {chapter.questions.length} câu hỏi
+                          </span>
+                          {chapter.source && (
+                            <span className="rounded-full bg-accent/10 px-3 py-1.5 text-xs font-bold text-accent">{chapter.source}</span>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2 md:min-w-[300px]">
-                      {chapter.enabled ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => startQuiz(chapter, 'study')}
-                            className="rounded-2xl border border-border bg-white px-5 py-3 text-sm font-extrabold text-text-main transition-all hover:border-accent hover:text-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
-                          >
-                            Học từng câu
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => startQuiz(chapter, 'exam')}
-                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sidebar-bg px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-slate-950 focus:outline-none focus:ring-4 focus:ring-accent/20"
-                          >
-                            Thi thử
-                            <ChevronRight size={17} />
-                          </button>
-                        </>
-                      ) : (
-                        <span className="rounded-2xl bg-bg px-5 py-3 text-center text-xs font-extrabold uppercase tracking-wider text-text-dim sm:col-span-2">
-                          Sắp ra mắt
-                        </span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => startQuiz(chapter, 'study')}
+                        className="rounded-2xl border border-border bg-white px-5 py-3 text-sm font-extrabold text-text-main transition-all hover:border-accent hover:text-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
+                      >
+                        Học từng câu
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startQuiz(chapter, 'exam')}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-sidebar-bg px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-slate-950 focus:outline-none focus:ring-4 focus:ring-accent/20"
+                      >
+                        Thi thử
+                        <ChevronRight size={17} />
+                      </button>
                     </div>
                   </div>
                 </motion.article>
@@ -410,9 +431,7 @@ export default function App() {
   }
 
   if (quizState.isFinished) {
-    const finalElapsedSeconds = quizState.endTime
-      ? Math.floor((quizState.endTime - quizState.startTime) / 1000)
-      : elapsedTime;
+    const finalElapsedSeconds = quizState.endTime ? Math.floor((quizState.endTime - quizState.startTime) / 1000) : elapsedTime;
     const percent = Math.round((quizState.score / quizState.questions.length) * 100);
 
     return (
@@ -495,13 +514,11 @@ export default function App() {
             </button>
 
             <div className="flex items-center gap-2 lg:flex-col">
-              {CHAPTERS.map((chapter) => (
+              {enabledChapters.map((chapter) => (
                 <div
                   key={chapter.id}
                   className={`grid h-10 w-10 place-items-center rounded-2xl border text-xs font-black transition-all lg:h-12 lg:w-12 lg:text-sm ${
-                    chapter.id === selectedChapter.id
-                      ? 'border-accent bg-accent text-white shadow-lg shadow-blue-500/20'
-                      : 'border-white/10 bg-white/10 text-white/45'
+                    chapter.id === selectedChapter.id ? 'border-accent bg-accent text-white shadow-lg shadow-blue-500/20' : 'border-white/10 bg-white/10 text-white/45'
                   }`}
                 >
                   C{chapter.id}
@@ -547,9 +564,7 @@ export default function App() {
                 </div>
                 <div className="rounded-2xl bg-bg px-3 py-2 text-center sm:min-w-28">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-dim">Đã làm</p>
-                  <p className="text-sm font-black">
-                    {stats.answered}/{quizState.questions.length}
-                  </p>
+                  <p className="text-sm font-black">{stats.answered}/{quizState.questions.length}</p>
                 </div>
                 <div className="rounded-2xl bg-bg px-3 py-2 text-center sm:min-w-28">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-text-dim">
@@ -590,8 +605,7 @@ export default function App() {
                   const showFeedback = quizState.mode === 'study' && hasAnswered;
                   const isLocked = quizState.mode === 'study' && hasAnswered;
 
-                  let buttonClass =
-                    'w-full rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 sm:p-5 ';
+                  let buttonClass = 'w-full rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 sm:p-5 ';
 
                   if (!hasAnswered) {
                     buttonClass += 'border-border bg-white hover:border-accent hover:bg-accent/5';
@@ -610,13 +624,7 @@ export default function App() {
                   }
 
                   return (
-                    <button
-                      key={key}
-                      type="button"
-                      disabled={isLocked}
-                      onClick={() => handleAnswer(key)}
-                      className={buttonClass}
-                    >
+                    <button key={key} type="button" disabled={isLocked} onClick={() => handleAnswer(key)} className={buttonClass}>
                       <span className="flex items-start gap-4">
                         <span
                           className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-black transition-colors ${
@@ -667,9 +675,7 @@ export default function App() {
                   <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-text-dim">Bản đồ câu hỏi</p>
                   <p className="mt-1 text-sm text-text-dim">Chạm để chuyển câu nhanh</p>
                 </div>
-                <div className="rounded-2xl bg-accent/10 px-3 py-2 text-sm font-black text-accent">
-                  {Math.round(progress)}%
-                </div>
+                <div className="rounded-2xl bg-accent/10 px-3 py-2 text-sm font-black text-accent">{Math.round(progress)}%</div>
               </div>
 
               <div className="grid max-h-[310px] grid-cols-6 gap-2 overflow-y-auto pr-1 custom-scrollbar sm:grid-cols-8 lg:max-h-[calc(100vh-11rem)] lg:grid-cols-6">
@@ -678,30 +684,20 @@ export default function App() {
                   const isCurrent = index === quizState.currentQuestionIndex;
                   const isCorrect = isAnswered && quizState.userAnswers[question.id] === question.answer;
 
-                  let dotClass =
-                    'aspect-square rounded-xl border text-[11px] font-black transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 ';
+                  let dotClass = 'aspect-square rounded-xl border text-[11px] font-black transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 ';
 
                   if (quizState.mode === 'study' && isAnswered) {
-                    dotClass += isCorrect
-                      ? 'border-success bg-success text-white'
-                      : 'border-red-500 bg-red-500 text-white';
+                    dotClass += isCorrect ? 'border-success bg-success text-white' : 'border-red-500 bg-red-500 text-white';
                   } else if (isAnswered) {
                     dotClass += 'border-accent bg-accent/10 text-accent';
                   } else {
                     dotClass += 'border-border bg-bg text-text-dim hover:border-accent';
                   }
 
-                  if (isCurrent) {
-                    dotClass += ' ring-2 ring-accent ring-offset-2 scale-105';
-                  }
+                  if (isCurrent) dotClass += ' ring-2 ring-accent ring-offset-2 scale-105';
 
                   return (
-                    <button
-                      key={question.id}
-                      type="button"
-                      onClick={() => jumpToQuestion(index)}
-                      className={dotClass}
-                    >
+                    <button key={question.id} type="button" onClick={() => jumpToQuestion(index)} className={dotClass}>
                       {index + 1}
                     </button>
                   );
