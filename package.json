@@ -14,12 +14,11 @@
   ],
   "type": "module",
   "scripts": {
-    "sync:questions": "tsx scripts/merge-question-bank.ts",
-    "dev": "npm run sync:questions && tsx server.ts",
-    "build": "npm run sync:questions && vite build",
+    "dev": "tsx server.ts",
+    "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist android",
-    "lint": "npm run sync:questions && tsc --noEmit",
+    "lint": "tsc --noEmit",
     "prepare:capacitor": "npm install --no-save @capacitor/cli@7.4.3 @capacitor/core@7.4.3 @capacitor/android@7.4.3",
     "apk:debug": "npm run build && npm run prepare:capacitor && rm -rf android && npx cap add android && npx cap sync android && cd android && chmod +x gradlew && ./gradlew assembleDebug"
   },
