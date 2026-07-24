@@ -36,7 +36,14 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          java -version
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
 
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
@@ -71,10 +78,15 @@ jobs:
       - name: Sync web build to Android
         run: npx cap sync android
 
-      - name: Build debug APK
+      - name: Show Gradle config
         run: |
           cd android
           chmod +x gradlew
+          ./gradlew --version --no-daemon
+
+      - name: Build debug APK
+        run: |
+          cd android
           ./gradlew assembleDebug --no-daemon --stacktrace --warning-mode all
 
       - name: Upload APK artifact
