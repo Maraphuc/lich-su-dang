@@ -4,7 +4,6 @@ const config: CapacitorConfig = {
   appId: 'com.maraphuc.lichsudang',
   appName: 'Lịch Sử Đảng',
   webDir: 'dist',
-  bundledWebRuntime: false,
   server: {
     androidScheme: 'https'
   }
