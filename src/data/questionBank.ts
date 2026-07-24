@@ -2,17 +2,7 @@ import { QuestionBankChapter } from '../types';
 import { chapter1Questions } from './chapter1';
 import { chapter2Questions } from './chapter2';
 import { chapter3Questions } from './chapter3';
-import {
-  officialChapter1Questions,
-  officialChapter2Questions,
-  officialChapter3Questions
-} from './officialSupplement';
-
-const officialSupplementQuestions = [
-  ...officialChapter1Questions,
-  ...officialChapter2Questions,
-  ...officialChapter3Questions
-];
+import { chapter4Questions } from './chapter4';
 
 export const baseQuestionBank: QuestionBankChapter[] = [
   {
@@ -46,9 +36,9 @@ export const baseQuestionBank: QuestionBankChapter[] = [
     id: 4,
     title: 'Chương 4',
     description: 'Bộ câu hỏi bổ sung từ nguồn chính thống: Văn kiện Đảng, Đại hội Đảng và Cương lĩnh',
-    questionCount: officialSupplementQuestions.length,
+    questionCount: chapter4Questions.length,
     enabled: true,
     source: 'Tư liệu Văn kiện Đảng và tài liệu chính thống đã biên soạn lại',
-    questions: officialSupplementQuestions
+    questions: chapter4Questions
   }
 ];
