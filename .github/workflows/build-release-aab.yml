@@ -1,0 +1,142 @@
+name: Build Release AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Branch or ref to build'
+        required: true
+        default: 'ui-professional-responsive-apk'
+      version_code:
+        description: 'Android versionCode, must increase for every Play upload'
+        required: true
+        default: '1'
+      version_name:
+        description: 'Android versionName shown to users'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: read
+
+jobs:
+  build-release-aab:
+    name: Build signed release AAB
+    runs-on: ubuntu-22.04
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_VERSION_CODE: ${{ inputs.version_code }}
+      ANDROID_VERSION_NAME: ${{ inputs.version_name }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Validate release secrets
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || (echo "Missing ANDROID_KEYSTORE_BASE64" && exit 1)
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || (echo "Missing ANDROID_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$ANDROID_KEY_ALIAS" || (echo "Missing ANDROID_KEY_ALIAS" && exit 1)
+          test -n "$ANDROID_KEY_PASSWORD" || (echo "Missing ANDROID_KEY_PASSWORD" && exit 1)
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+      - name: Install Android SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Install web dependencies
+        run: npm ci || npm install
+
+      - name: Check TypeScript
+        run: npm run lint
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Install Capacitor packages
+        run: npm run prepare:capacitor
+
+      - name: Create Android project
+        run: |
+          rm -rf android
+          npx cap add android
+
+      - name: Configure Android SDK path
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Sync web build to Android
+        run: npx cap sync android
+
+      - name: Configure Play release build
+        run: |
+          cd android
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+          python3 <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          build_file = Path('app/build.gradle')
+          text = build_file.read_text()
+          text = re.sub(r'versionCode\s+\d+', f"versionCode {os.environ['ANDROID_VERSION_CODE']}", text)
+          text = re.sub(r'versionName\s+\"[^\"]+\"', f"versionName \"{os.environ['ANDROID_VERSION_NAME']}\"", text)
+
+          if 'signingConfigs {' not in text:
+              text = text.replace('    buildTypes {', '''    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("ANDROID_KEY_ALIAS")
+            keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {''')
+
+          if 'signingConfig signingConfigs.release' not in text:
+              text = text.replace('        release {', '''        release {
+            signingConfig signingConfigs.release''', 1)
+
+          build_file.write_text(text)
+          PY
+
+      - name: Build signed release AAB
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace --warning-mode all
+
+      - name: Verify AAB exists
+        run: test -f android/app/build/outputs/bundle/release/app-release.aab
+
+      - name: Upload release AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lich-su-dang-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
