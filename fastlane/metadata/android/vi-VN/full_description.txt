@@ -1,0 +1,17 @@
+Lịch Sử Đảng Quiz là ứng dụng hỗ trợ sinh viên ôn tập môn Lịch sử Đảng Cộng sản Việt Nam thông qua hệ thống câu hỏi trắc nghiệm, quiz theo chương và chế độ thi thử trực quan.
+
+Ứng dụng phù hợp cho người học muốn tự ôn thi Lịch sử Đảng, luyện câu hỏi nhanh trước kỳ kiểm tra, hoặc củng cố kiến thức theo từng chủ đề.
+
+Tính năng nổi bật:
+• Ôn tập Lịch sử Đảng theo từng chương
+• Làm quiz trắc nghiệm với giao diện dễ dùng
+• Chế độ thi thử giúp kiểm tra mức độ ghi nhớ
+• Theo dõi tiến độ làm bài và kết quả sau khi hoàn thành
+• Giao diện tối ưu cho điện thoại, máy tính bảng và desktop
+• Phù hợp cho sinh viên cần ôn thi, tự học và luyện đề
+
+Các nội dung trọng tâm trong ứng dụng xoay quanh việc học và ôn tập môn Lịch sử Đảng, bao gồm câu hỏi Lịch sử Đảng, trắc nghiệm Lịch sử Đảng, quiz Lịch sử Đảng và thi thử Lịch sử Đảng.
+
+Ứng dụng được thiết kế theo hướng đơn giản, rõ ràng, giúp người học tập trung vào câu hỏi và đáp án. Ở chế độ học, bạn có thể luyện tập để ghi nhớ kiến thức. Ở chế độ thi thử, ứng dụng mô phỏng trải nghiệm kiểm tra nghiêm túc hơn, chỉ hiển thị kết quả sau khi hoàn thành bài.
+
+Lưu ý: Ứng dụng là công cụ hỗ trợ học tập và ôn luyện cá nhân, không đại diện cho bất kỳ cơ quan, tổ chức hoặc đơn vị giáo dục chính thức nào.
