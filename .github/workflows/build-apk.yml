@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - ui-professional-responsive-apk
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -22,7 +25,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
+          cache: npm
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -30,8 +34,8 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install web dependencies
+        run: npm ci || npm install
 
       - name: Check TypeScript
         run: npm run lint
@@ -39,8 +43,13 @@ jobs:
       - name: Build web app
         run: npm run build
 
+      - name: Install Capacitor packages
+        run: npm run prepare:capacitor
+
       - name: Create Android project
-        run: npx cap add android
+        run: |
+          rm -rf android
+          npx cap add android
 
       - name: Sync web build to Android
         run: npx cap sync android
