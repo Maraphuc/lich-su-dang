@@ -60,4 +60,4 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-# Trigger preview deploy after hiding the public Admin entry.
+# Trigger preview deploy after adding Play release workflow and privacy policy.
