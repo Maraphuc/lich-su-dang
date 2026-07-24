@@ -46,9 +46,14 @@ const mergeQuestionBank = (savedChapters: QuestionBankChapter[]): QuestionBankCh
 
     const savedQuestionsById = new Map(savedChapter.questions.map((question) => [question.id, question]));
     const baseQuestionIds = new Set(baseChapter.questions.map((question) => question.id));
+    const savedExtraQuestions = savedChapter.questions.filter((question) => {
+      if (baseQuestionIds.has(question.id)) return false;
+      if (baseChapter.id === 4 && question.id < 4000) return false;
+      return true;
+    });
     const mergedQuestions = [
       ...baseChapter.questions.map((question) => savedQuestionsById.get(question.id) ?? question),
-      ...savedChapter.questions.filter((question) => !baseQuestionIds.has(question.id))
+      ...savedExtraQuestions
     ];
 
     return {
@@ -125,7 +130,7 @@ const HeartRain = () => {
 
 export default function App() {
   const [questionBank, setQuestionBank] = useState<QuestionBankChapter[]>(loadQuestionBank);
-  const [isAdminRoute, setIsAdminRoute] = useState(isAdminLocation);
+  const [isAdminRoute, setIsAdminRoute] = useState(() => isAdminLocation());
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -134,31 +139,16 @@ export default function App() {
     () => normalizeBank(questionBank).filter((chapter) => chapter.enabled),
     [questionBank]
   );
-
   const totalQuestions = useMemo(
     () => enabledChapters.reduce((total, chapter) => total + chapter.questions.length, 0),
     [enabledChapters]
   );
 
   useEffect(() => {
-    const handleLocationChange = () => setIsAdminRoute(isAdminLocation());
-    window.addEventListener('hashchange', handleLocationChange);
-    window.addEventListener('popstate', handleLocationChange);
-    return () => {
-      window.removeEventListener('hashchange', handleLocationChange);
-      window.removeEventListener('popstate', handleLocationChange);
-    };
+    const handleHashChange = () => setIsAdminRoute(isAdminLocation());
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
-
-  useEffect(() => {
-    const migrated = mergeQuestionBank(questionBank);
-    const current = JSON.stringify(questionBank);
-    const next = JSON.stringify(migrated);
-    if (current !== next) {
-      window.localStorage.setItem(QUESTION_BANK_STORAGE_KEY, next);
-      setQuestionBank(migrated);
-    }
-  }, [questionBank]);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -230,7 +220,9 @@ export default function App() {
 
   const handleAnswer = (answer: string) => {
     if (!quizState) return;
+
     const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
+
     setQuizState({
       ...quizState,
       userAnswers: {
@@ -245,11 +237,14 @@ export default function App() {
 
     let score = 0;
     quizState.questions.forEach((question) => {
-      if (quizState.userAnswers[question.id] === question.answer) score++;
+      if (quizState.userAnswers[question.id] === question.answer) {
+        score++;
+      }
     });
 
     const endTime = Date.now();
     const finalElapsedTime = Math.floor((endTime - quizState.startTime) / 1000);
+
     setElapsedTime(finalElapsedTime);
     setQuizState({ ...quizState, isFinished: true, score, endTime });
 
@@ -274,6 +269,7 @@ export default function App() {
 
   const nextQuestion = () => {
     if (!quizState) return;
+
     if (quizState.currentQuestionIndex < quizState.questions.length - 1) {
       setQuizState({ ...quizState, currentQuestionIndex: quizState.currentQuestionIndex + 1 });
     } else {
@@ -299,10 +295,14 @@ export default function App() {
 
   const stats = useMemo(() => {
     if (!quizState) return { answered: 0, correct: 0 };
+
     let correct = 0;
     quizState.questions.forEach((question) => {
-      if (quizState.userAnswers[question.id] === question.answer) correct++;
+      if (quizState.userAnswers[question.id] === question.answer) {
+        correct++;
+      }
     });
+
     return { answered: Object.keys(quizState.userAnswers).length, correct };
   }, [quizState]);
 
@@ -355,15 +355,6 @@ export default function App() {
                     <p className="text-xs text-white/60">Câu hỏi</p>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={openAdmin}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-extrabold text-sidebar-bg transition-all hover:-translate-y-0.5"
-                >
-                  <Settings size={17} />
-                  Bảng điều khiển Admin
-                </button>
               </div>
             </div>
           </aside>
@@ -382,7 +373,7 @@ export default function App() {
                       Ôn tập Lịch sử Đảng rõ ràng, hiện đại và dễ mở rộng.
                     </h2>
                     <p className="mt-4 max-w-2xl text-base leading-8 text-text-dim sm:text-lg">
-                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Chương 4 là bộ câu hỏi bổ sung từ nguồn chính thống và Admin cho phép tự tạo chương mới.
+                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Có trang Admin để tạo chương mới, chỉnh sửa câu hỏi và export JSON.
                     </p>
                   </div>
 
@@ -405,7 +396,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mt-6 grid gap-3 sm:grid-cols-[auto_1fr]">
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
                     onClick={openAdmin}
@@ -415,7 +406,7 @@ export default function App() {
                     Bảng điều khiển Admin
                   </button>
                   <span className="rounded-2xl bg-bg px-5 py-3 text-sm font-semibold text-text-dim">
-                    Link trực tiếp: <span className="font-mono text-accent">#/admin</span>. Admin hiện là bảng quản trị local trong app, không phải backend đăng nhập riêng.
+                    Admin lưu local trên thiết bị và có thể export JSON để cập nhật mã nguồn.
                   </span>
                 </div>
               </motion.div>
@@ -498,6 +489,7 @@ export default function App() {
             <div className="mx-auto mb-6 grid h-20 w-20 place-items-center rounded-[28px] bg-success/10">
               <Trophy className="text-success" size={42} />
             </div>
+
             <p className="mb-2 text-xs font-extrabold uppercase tracking-[0.22em] text-accent">
               {quizState.mode === 'exam' ? 'Kết quả thi thử' : 'Kết quả ôn tập'}
             </p>
@@ -583,7 +575,9 @@ export default function App() {
               type="button"
               onClick={() => {
                 if (Object.keys(quizState.userAnswers).length > 0) {
-                  if (window.confirm('Bạn có chắc chắn muốn nộp bài và kết thúc ngay bây giờ không?')) finishQuiz();
+                  if (window.confirm('Bạn có chắc chắn muốn nộp bài và kết thúc ngay bây giờ không?')) {
+                    finishQuiz();
+                  }
                 } else {
                   finishQuiz();
                 }
@@ -664,9 +658,13 @@ export default function App() {
                   if (!hasAnswered) {
                     buttonClass += 'border-border bg-white hover:border-accent hover:bg-accent/5';
                   } else if (showFeedback) {
-                    if (isCorrect) buttonClass += 'border-success bg-success/10 text-success';
-                    else if (isSelected) buttonClass += 'border-red-500 bg-red-50 text-red-700';
-                    else buttonClass += 'border-border bg-white opacity-55';
+                    if (isCorrect) {
+                      buttonClass += 'border-success bg-success/10 text-success';
+                    } else if (isSelected) {
+                      buttonClass += 'border-red-500 bg-red-50 text-red-700';
+                    } else {
+                      buttonClass += 'border-border bg-white opacity-55';
+                    }
                   } else if (isSelected) {
                     buttonClass += 'border-accent bg-accent/10 text-accent';
                   } else {
@@ -746,14 +744,18 @@ export default function App() {
                     'aspect-square rounded-xl border text-[11px] font-black transition-all focus:outline-none focus:ring-4 focus:ring-accent/15 ';
 
                   if (quizState.mode === 'study' && isAnswered) {
-                    dotClass += isCorrect ? 'border-success bg-success text-white' : 'border-red-500 bg-red-500 text-white';
+                    dotClass += isCorrect
+                      ? 'border-success bg-success text-white'
+                      : 'border-red-500 bg-red-500 text-white';
                   } else if (isAnswered) {
                     dotClass += 'border-accent bg-accent/10 text-accent';
                   } else {
                     dotClass += 'border-border bg-bg text-text-dim hover:border-accent';
                   }
 
-                  if (isCurrent) dotClass += ' ring-2 ring-accent ring-offset-2 scale-105';
+                  if (isCurrent) {
+                    dotClass += ' ring-2 ring-accent ring-offset-2 scale-105';
+                  }
 
                   return (
                     <button key={question.id} type="button" onClick={() => jumpToQuestion(index)} className={dotClass}>
