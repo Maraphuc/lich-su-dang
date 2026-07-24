@@ -1,6 +1,6 @@
 # Nguồn biên soạn bộ câu hỏi bổ sung
 
-Bộ câu hỏi bổ sung trong `src/data/officialSupplement.ts` được biên soạn lại theo dạng trắc nghiệm từ các nguồn chính thống, không sao chép nguyên văn dài.
+Chương 4 hiện được quản lý trong `src/data/chapter4.ts` với khoảng 300 câu hỏi. Bộ câu hỏi này được biên soạn lại theo dạng trắc nghiệm từ các nguồn chính thống, không sao chép nguyên văn dài và không dùng bộ đề trôi nổi không rõ bản quyền.
 
 ## Nguồn ưu tiên
 
@@ -19,23 +19,24 @@ Bộ câu hỏi bổ sung trong `src/data/officialSupplement.ts` được biên 
 5. **Tư liệu Văn kiện Đảng - Cương lĩnh 1991 và Cương lĩnh bổ sung, phát triển năm 2011**
    - Dùng cho nhóm câu hỏi về thời kỳ quá độ lên chủ nghĩa xã hội, các đặc trưng xã hội xã hội chủ nghĩa ở Việt Nam, thành tựu đổi mới, công nghiệp hóa, hiện đại hóa và hội nhập quốc tế.
 
+6. **Tư liệu Văn kiện Đảng - Các kỳ Đại hội Đảng từ I đến XIII**
+   - Dùng cho nhóm câu hỏi về thời gian, địa điểm, văn kiện, nhân sự chủ chốt, ý nghĩa và định hướng phát triển qua từng kỳ Đại hội.
+
 ## Nguyên tắc biên soạn
 
 - Ưu tiên câu hỏi kiểm tra mốc thời gian, địa điểm, nhân vật, văn kiện, ý nghĩa lịch sử và nội dung đường lối.
 - Không dùng câu hỏi mơ hồ hoặc quá dài.
 - Không nhồi từ khóa chính trị; viết rõ ràng, phù hợp mục tiêu ôn tập.
 - Không copy nguyên văn các bộ đề trắc nghiệm không rõ bản quyền.
-- Khi thêm câu hỏi mới, dùng ID cao theo chương:
-  - Chương 1: từ `1001`
-  - Chương 2: từ `2001`
-  - Chương 3: từ `3001`
+- Chương 4 dùng ID từ `4001` trở lên.
+- Khi cần thêm câu hỏi mới, ưu tiên tạo chương/bộ riêng trong `src/data/questionBank.ts`, không chèn lẫn vào chương cũ.
 
-## Cách đồng bộ vào app
+## Cách chỉnh sửa trong app
 
-Chạy lệnh:
+Mở trang Admin:
 
-```bash
-npm run sync:questions
+```text
+#/admin
 ```
 
-Các workflow build/lint/dev đã tự chạy lệnh này trước khi kiểm tra hoặc build app.
+Trang Admin cho phép thêm chương, sửa câu hỏi, import/export JSON. Dữ liệu chỉnh trong Admin được lưu local trên thiết bị; nếu muốn đưa vào mã nguồn chính thức, export JSON rồi cập nhật lại các file trong `src/data`.
