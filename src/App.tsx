@@ -9,16 +9,17 @@ import {
   Heart,
   Home,
   RotateCcw,
-  Settings,
   Target,
   Trophy
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AdminPage } from './AdminPage';
 import { baseQuestionBank } from './data/questionBank';
-import { Chapter, Question, QuestionBankChapter, QuizMode, QuizState } from './types';
+import { Question, QuestionBankChapter, QuizMode, QuizState } from './types';
 
 const QUESTION_BANK_STORAGE_KEY = 'lich-su-dang-question-bank-v1';
+const ADMIN_ROUTE = '#/quan-tri-cau-hoi';
+const ADMIN_ACCESS_KEY = 'maraphuc-admin-2026';
 
 const shuffle = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -86,10 +87,16 @@ const loadQuestionBank = (): QuestionBankChapter[] => {
   }
 };
 
-const isAdminLocation = () =>
-  window.location.hash === '#/admin' ||
-  window.location.hash === '#admin' ||
-  window.location.search.includes('admin=1');
+const getHashSearchParams = () => {
+  const query = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+  return new URLSearchParams(query);
+};
+
+const isAdminLocation = () => {
+  const isAdminHash = window.location.hash.startsWith(ADMIN_ROUTE) || window.location.hash.startsWith('#/admin');
+  if (!isAdminHash) return false;
+  return getHashSearchParams().get('key') === ADMIN_ACCESS_KEY;
+};
 
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60);
@@ -131,7 +138,7 @@ const HeartRain = () => {
 export default function App() {
   const [questionBank, setQuestionBank] = useState<QuestionBankChapter[]>(loadQuestionBank);
   const [isAdminRoute, setIsAdminRoute] = useState(() => isAdminLocation());
-  const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState<QuestionBankChapter | null>(null);
   const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
 
@@ -145,9 +152,9 @@ export default function App() {
   );
 
   useEffect(() => {
-    const handleHashChange = () => setIsAdminRoute(isAdminLocation());
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    const handleRouteChange = () => setIsAdminRoute(isAdminLocation());
+    window.addEventListener('hashchange', handleRouteChange);
+    return () => window.removeEventListener('hashchange', handleRouteChange);
   }, []);
 
   useEffect(() => {
@@ -187,18 +194,13 @@ export default function App() {
     setElapsedTime(0);
   };
 
-  const openAdmin = () => {
-    window.location.hash = '#/admin';
-    setIsAdminRoute(true);
-  };
-
   const closeAdmin = () => {
     window.location.hash = '';
     setIsAdminRoute(false);
   };
 
-  const startQuiz = (chapter: Chapter, mode: QuizMode) => {
-    let questions = getQuestionsByChapter(Number(chapter.id));
+  const startQuiz = (chapter: QuestionBankChapter, mode: QuizMode) => {
+    let questions = getQuestionsByChapter(chapter.id);
 
     if (mode === 'exam') {
       questions = shuffle(questions).slice(0, Math.min(50, questions.length));
@@ -341,7 +343,7 @@ export default function App() {
                     Mục tiêu
                   </div>
                   <p className="text-sm leading-relaxed text-white/85">
-                    Ôn tập trọng tâm, luyện thi nhanh và quản lý ngân hàng câu hỏi theo chương.
+                    Ôn tập trọng tâm, luyện thi nhanh và theo dõi tiến độ rõ ràng trên mọi thiết bị.
                   </p>
                 </div>
 
@@ -370,10 +372,10 @@ export default function App() {
                 <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
                   <div>
                     <h2 className="max-w-3xl text-3xl font-black tracking-tight text-text-main sm:text-4xl lg:text-5xl">
-                      Ôn tập Lịch sử Đảng rõ ràng, hiện đại và dễ mở rộng.
+                      Ôn tập Lịch sử Đảng rõ ràng, hiện đại và dễ dùng.
                     </h2>
                     <p className="mt-4 max-w-2xl text-base leading-8 text-text-dim sm:text-lg">
-                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Có trang Admin để tạo chương mới, chỉnh sửa câu hỏi và export JSON.
+                      Chọn chương để học theo từng câu hoặc làm bài thi thử 50 câu. Giao diện tối ưu cho điện thoại, máy tính bảng và desktop.
                     </p>
                   </div>
 
@@ -394,20 +396,6 @@ export default function App() {
                       <p className="text-[11px] text-text-dim">Chương</p>
                     </div>
                   </div>
-                </div>
-
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={openAdmin}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-white px-5 py-3 text-sm font-extrabold transition-all hover:border-accent hover:text-accent focus:outline-none focus:ring-4 focus:ring-accent/15"
-                  >
-                    <Settings size={17} />
-                    Bảng điều khiển Admin
-                  </button>
-                  <span className="rounded-2xl bg-bg px-5 py-3 text-sm font-semibold text-text-dim">
-                    Admin lưu local trên thiết bị và có thể export JSON để cập nhật mã nguồn.
-                  </span>
                 </div>
               </motion.div>
             </section>
@@ -758,7 +746,12 @@ export default function App() {
                   }
 
                   return (
-                    <button key={question.id} type="button" onClick={() => jumpToQuestion(index)} className={dotClass}>
+                    <button
+                      key={question.id}
+                      type="button"
+                      onClick={() => jumpToQuestion(index)}
+                      className={dotClass}
+                    >
                       {index + 1}
                     </button>
                   );
