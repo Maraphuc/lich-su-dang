@@ -1,20 +1,7 @@
 name: Build Release AAB
 
-on:
+"on":
   workflow_dispatch:
-    inputs:
-      source_ref:
-        description: Branch or ref to build
-        required: true
-        default: ui-professional-responsive-apk
-      version_code:
-        description: Android versionCode, must increase for every Play upload
-        required: true
-        default: '1'
-      version_name:
-        description: Android versionName shown to users
-        required: true
-        default: 1.0.0
 
 permissions:
   contents: read
@@ -33,10 +20,10 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
-      - name: Checkout source
+      - name: Checkout preview branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.source_ref || 'ui-professional-responsive-apk' }}
+          ref: ui-professional-responsive-apk
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,10 +37,8 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Validate release inputs and secrets
+      - name: Validate release secrets
         run: |
-          test -n "${{ github.event.inputs.version_code }}" || (echo "Missing version_code" && exit 1)
-          test -n "${{ github.event.inputs.version_name }}" || (echo "Missing version_name" && exit 1)
           test -n "$ANDROID_KEYSTORE_BASE64" || (echo "Missing ANDROID_KEYSTORE_BASE64" && exit 1)
           test -n "$ANDROID_KEYSTORE_PASSWORD" || (echo "Missing ANDROID_KEYSTORE_PASSWORD" && exit 1)
           test -n "$ANDROID_KEY_ALIAS" || (echo "Missing ANDROID_KEY_ALIAS" && exit 1)
@@ -96,31 +81,30 @@ jobs:
         run: |
           cd android
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
-          VERSION_CODE="${{ github.event.inputs.version_code }}" VERSION_NAME="${{ github.event.inputs.version_name }}" python3 <<'PY'
+          python3 <<'PY'
           from pathlib import Path
-          import os
           import re
 
           build_file = Path('app/build.gradle')
           text = build_file.read_text()
-          text = re.sub(r'versionCode\s+\d+', f"versionCode {os.environ['VERSION_CODE']}", text)
-          text = re.sub(r'versionName\s+\"[^\"]+\"', f"versionName \"{os.environ['VERSION_NAME']}\"", text)
+          text = re.sub(r'versionCode\s+\d+', 'versionCode 1', text)
+          text = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.0.0"', text)
 
           if 'signingConfigs {' not in text:
               text = text.replace('    buildTypes {', '''    signingConfigs {
-          release {
-              storeFile file("release.keystore")
-              storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-              keyAlias System.getenv("ANDROID_KEY_ALIAS")
-              keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+              release {
+                  storeFile file("release.keystore")
+                  storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                  keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                  keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+              }
           }
-      }
 
-      buildTypes {''')
+          buildTypes {''')
 
           if 'signingConfig signingConfigs.release' not in text:
               text = text.replace('        release {', '''        release {
-              signingConfig signingConfigs.release''', 1)
+                  signingConfig signingConfigs.release''', 1)
 
           build_file.write_text(text)
           PY
