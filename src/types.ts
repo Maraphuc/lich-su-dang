@@ -34,4 +34,10 @@ export interface Chapter {
   description: string;
   questionCount: number;
   enabled: boolean;
+  source?: string;
+}
+
+export interface QuestionBankChapter extends Chapter {
+  questions: Question[];
+  custom?: boolean;
 }
